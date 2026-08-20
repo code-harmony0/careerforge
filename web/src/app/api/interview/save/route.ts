@@ -6,8 +6,8 @@
 // has (job.text after a "done" stream); this route just persists it, the same
 // division of labor pdf-render.mjs uses for the PDF envelope (#2185).
 import fs from "node:fs";
-import path from "node:path";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { atomicWrite } from "@/lib/core/safe-write";
 import { resolveInterviewPrepPath, mergeSection, SECTION_HEADINGS } from "@/lib/interview-paths.mjs";
 
 export const runtime = "nodejs";
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "bad json" }, { status: 400 });
   }
   const { company, role, kind, content } = body;
-  if (!kind || !(kind in SECTION_HEADINGS)) {
+  if (!kind || !Object.prototype.hasOwnProperty.call(SECTION_HEADINGS, kind)) {
     return Response.json({ error: `kind must be one of: ${Object.keys(SECTION_HEADINGS).join(", ")}` }, { status: 400 });
   }
   if (!content || !content.trim()) {
@@ -32,7 +32,6 @@ export async function POST(req: Request) {
     return Response.json({ error: "Company and role are required to save." }, { status: 400 });
   }
 
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   let existing: string | null = null;
   try {
     existing = fs.readFileSync(filePath, "utf8");
@@ -40,7 +39,11 @@ export async function POST(req: Request) {
     existing = null;
   }
   const merged = mergeSection(existing, kind as keyof typeof SECTION_HEADINGS, company ?? "", role ?? "", content);
-  fs.writeFileSync(filePath, merged, "utf8");
+  try {
+    atomicWrite(filePath, merged);
+  } catch {
+    return Response.json({ error: "write failed" }, { status: 500 });
+  }
 
-  return Response.json({ ok: true, path: filePath });
+  return Response.json({ ok: true });
 }
