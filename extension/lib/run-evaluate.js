@@ -1,12 +1,15 @@
 // extension/lib/run-evaluate.js
-// Same contract as web/src/components/jobs/job-store.tsx's startJob(): POST
-// /api/run, read the NDJSON stream, surface text + VERDICT. Kept separate
-// from sidepanel.js so it stays a plain, unit-testable-shaped function (the
-// fetch/stream parts aren't unit tested here — no network in node --test —
-// but parseVerdict, which it calls, is covered in Task 6).
+// Drives the same /api/run contract web/src/components/jobs/job-store.tsx's
+// startJob() uses — but reports STRUCTURED progress/result callbacks instead
+// of a growing wall of raw text, so the side panel can render a real status
+// line + result card instead of a chat bubble nobody can read the state of.
 import { parseVerdict } from "./verdict.js";
 
-export async function runEvaluate({ serverUrl, cliId, url, onText }) {
+// callbacks:
+//   onStatus(label)              — a short human-readable progress line
+//   onDone({score, summary, reportNum, reportUrl})
+//   onError(message)
+export async function runEvaluate({ serverUrl, cliId, url, onStatus, onDone, onError }) {
   let res;
   try {
     res = await fetch(`${serverUrl}/api/run`, {
@@ -15,11 +18,18 @@ export async function runEvaluate({ serverUrl, cliId, url, onText }) {
       body: JSON.stringify({ kind: "evaluate", input: url, cliId }),
     });
   } catch {
-    onText("Could not reach career-ops to start the evaluation.");
+    onError("Could not reach career-ops to start the evaluation.");
     return;
   }
   if (!res.ok || !res.body) {
-    onText("Evaluation failed to start.");
+    let msg = "Evaluation failed to start.";
+    try {
+      const body = await res.json();
+      if (body?.error) msg = body.error;
+    } catch {
+      /* non-JSON error body — keep the generic message */
+    }
+    onError(msg);
     return;
   }
 
@@ -45,27 +55,34 @@ export async function runEvaluate({ serverUrl, cliId, url, onText }) {
         } catch {
           continue;
         }
-        if (ev.type === "text") {
+        if (ev.type === "tool") {
+          onStatus(`Reading ${ev.name}…`);
+        } else if (ev.type === "status") {
+          onStatus(String(ev.label || "Working…"));
+        } else if (ev.type === "text") {
           const full = text + ev.text;
           const vm = full.match(/VERDICT:[^\n]*/i);
           if (vm) verdictLine = vm[0];
           text = full.slice(-4000);
-          onText(text);
+          onStatus("Writing the report…");
         } else if (ev.type === "done" && typeof ev.reportNum === "string") {
           reportNum = ev.reportNum;
         } else if (ev.type === "error") {
-          onText(`Error: ${ev.msg || "unknown"}`);
+          onError(ev.msg || "Evaluation failed.");
           return;
         }
       }
     }
   } catch {
-    onText("\n\n[connection lost during evaluation]");
+    onError("Connection lost during evaluation.");
     return;
   }
 
   const { score, summary } = parseVerdict(verdictLine || text);
-  const scoreLine = score != null ? `Score: ${score}/5${summary ? ` — ${summary}` : ""}` : "Done (no score line found).";
-  const linkLine = reportNum ? `\n${serverUrl}/pipeline/${reportNum}` : "";
-  onText(`${scoreLine}${linkLine}`);
+  onDone({
+    score,
+    summary,
+    reportNum,
+    reportUrl: reportNum ? `${serverUrl}/pipeline/${reportNum}` : undefined,
+  });
 }

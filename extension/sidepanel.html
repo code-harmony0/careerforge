@@ -7,8 +7,37 @@
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
-    <div id="capture-banner" class="hidden"></div>
+    <div id="capture-card" class="hidden">
+      <div id="capture-title"></div>
+      <div id="capture-url"></div>
+      <div id="capture-warning" class="hidden">
+        This looks like a list of jobs, not one posting — results will be noisy.
+        <span id="evaluate-anyway" class="action-link">Evaluate anyway</span>
+      </div>
+    </div>
+
+    <div id="status-row" class="hidden">
+      <span class="spinner"></span>
+      <span id="status-text"></span>
+    </div>
+
+    <div id="result-card" class="hidden">
+      <div id="score-badge"></div>
+      <div id="result-summary"></div>
+      <a id="open-report" class="hidden" target="_blank" rel="noopener">Open full report →</a>
+    </div>
+
+    <div id="error-card" class="hidden">
+      <div id="error-text"></div>
+      <span id="retry" class="action-link">Retry</span>
+    </div>
+
+    <div id="empty-state">
+      Click the <strong>career-ops</strong> pill on a job posting to capture and evaluate it here — or ask a question below.
+    </div>
+
     <div id="messages"></div>
+
     <div id="composer">
       <input id="input" placeholder="Ask career-ops…" />
       <button id="send">Send</button>

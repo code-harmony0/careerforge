@@ -1,7 +1,7 @@
 // extension/tests/verdict.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseVerdict } from "../lib/verdict.js";
+import { parseVerdict, scoreTone } from "../lib/verdict.js";
 
 test("parses a full VERDICT line with summary", () => {
   const r = parseVerdict("blah\nVERDICT: 4.5/5 — Strong match, apply soon\nblah");
@@ -18,4 +18,15 @@ test("falls back to a bare X/5 pattern with no summary", () => {
 test("returns null score when nothing matches", () => {
   const r = parseVerdict("no score here");
   assert.equal(r.score, null);
+});
+
+test("scoreTone bands match web/src/lib/format.ts's scoreTone", () => {
+  assert.equal(scoreTone(4.5), "good");
+  assert.equal(scoreTone(4.2), "good");
+  assert.equal(scoreTone(4.0), "warn");
+  assert.equal(scoreTone(3.8), "warn");
+  assert.equal(scoreTone(3.5), "muted");
+  assert.equal(scoreTone(3.0), "muted");
+  assert.equal(scoreTone(2.9), "bad");
+  assert.equal(scoreTone(null), "muted");
 });
