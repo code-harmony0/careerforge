@@ -4,12 +4,11 @@ import { useState } from "react";
 import { useJobs } from "@/components/jobs/job-store";
 import { CostBadge } from "@/components/cost/cost-badge";
 
-type Kind = "interview-prep" | "interview-plan" | "offer-prep";
+type Kind = "interview-prep" | "interview-plan";
 
 const KIND_LABEL: Record<Kind, string> = {
   "interview-prep": "Generate prep brief",
   "interview-plan": "Build prep plan",
-  "offer-prep": "Walk through offer",
 };
 
 export function InterviewForm() {
@@ -18,7 +17,6 @@ export function InterviewForm() {
   const [role, setRole] = useState("");
   const [jd, setJd] = useState("");
   const [date, setDate] = useState("");
-  const [contractText, setContractText] = useState("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   // Snapshot of {company, role} as of the moment the active job was started —
   // save() must use this, not the live company/role state, so editing the
@@ -36,16 +34,9 @@ export function InterviewForm() {
       setHint("Company and role are both required.");
       return;
     }
-    if (kind === "offer-prep" && !contractText.trim()) {
-      setHint("Paste the offer/contract text to walk through it.");
-      return;
-    }
     setHint("");
     setSaveState("idle");
-    const input =
-      kind === "offer-prep"
-        ? JSON.stringify({ company, role, contractText })
-        : JSON.stringify({ company, role, jd: jd || undefined, date: kind === "interview-plan" ? date || undefined : undefined });
+    const input = JSON.stringify({ company, role, jd: jd || undefined, date: kind === "interview-plan" ? date || undefined : undefined });
     const id = startJob({ title: KIND_LABEL[kind], subtitle: `${company} — ${role}`, kind, input, page: "/interview" });
     setActiveJobId(id);
     setSavedFor({ company, role });
@@ -98,14 +89,6 @@ export function InterviewForm() {
         onChange={(e) => setDate(e.target.value)}
         aria-label="Interview date/time (used by Build prep plan)"
         className="rounded-lg border border-border bg-surface/70 px-3 py-2 text-sm outline-none focus:border-brand/50"
-      />
-      <textarea
-        value={contractText}
-        onChange={(e) => setContractText(e.target.value)}
-        placeholder="Offer/contract text (required only for offer walkthrough)"
-        aria-label="Offer/contract text"
-        rows={4}
-        className="w-full rounded-lg border border-border bg-surface/70 px-3 py-2 text-sm outline-none focus:border-brand/50"
       />
       {hint && <p className="text-xs text-faint">{hint}</p>}
       <div className="flex flex-wrap items-center gap-2">

@@ -67,8 +67,8 @@ test("mergeSection: does not accumulate blank lines across repeated merges on a 
   assert.ok(!second.includes("Updated plan.\n"), "must not still contain the first merge's stale body");
 });
 
-test("SECTION_HEADINGS: covers all three savable kinds", () => {
+test("SECTION_HEADINGS: covers both savable kinds, and only those two", () => {
   assert.equal(SECTION_HEADINGS["interview-prep"], "Prep Brief");
   assert.equal(SECTION_HEADINGS["interview-plan"], "Prep Plan");
-  assert.equal(SECTION_HEADINGS["offer-prep"], "Negotiation");
+  assert.deepEqual(Object.keys(SECTION_HEADINGS).sort(), ["interview-plan", "interview-prep"]);
 });

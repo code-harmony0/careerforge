@@ -48,7 +48,6 @@ export async function POST(req: Request) {
     pdf: "generate-pdf.mjs",
     "interview-prep": "modes/interview-prep.md",
     "interview-plan": "modes/interview/plan.md",
-    "offer-prep": "modes/offer-prep.md",
   };
   const required = needsScript[kind];
   if (required && !fs.existsSync(path.join(careerOpsRoot(), required))) {

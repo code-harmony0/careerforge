@@ -73,7 +73,7 @@ test("buildPrompt: the pdf prompt still pins tailoring to the real mode", () => 
 
 test("buildPrompt: every kind ends with exactly one VERDICT instruction", () => {
   // Given each kind — job-store.tsx parses that final line client-side
-  for (const kind of ["pdf", "research", "evaluate", "fix-portal", "interview-prep", "interview-plan", "offer-prep"]) {
+  for (const kind of ["pdf", "research", "evaluate", "fix-portal", "interview-prep", "interview-plan"]) {
     const prompt = buildPrompt({ kind, ...ARGS });
 
     // Then the contract is present exactly once, so the parse cannot pick a
@@ -113,17 +113,8 @@ test("buildPrompt: interview-plan states no fixed date when omitted, not an inve
   assert.match(prompt, /no interview date was given/i);
 });
 
-test("buildPrompt: offer-prep runs the real mode, skips interactive checkpoints, and never rates the offer", () => {
-  const input = JSON.stringify({ company: "Acme Corp", role: "Staff Engineer", contractText: "Base salary: $150,000..." });
-  const prompt = buildPrompt({ kind: "offer-prep", ...ARGS, input });
-  assert.match(prompt, /modes\/offer-prep\.md/);
-  assert.match(prompt, /SKIP/i);
-  // Then the VERDICT scores completeness of the walkthrough, not the offer's merit
-  assert.match(prompt, /never rate the offer itself/i);
-});
-
-test("buildPrompt: interview-prep/interview-plan/offer-prep survive malformed JSON input", () => {
-  for (const kind of ["interview-prep", "interview-plan", "offer-prep"]) {
+test("buildPrompt: interview-prep/interview-plan survive malformed JSON input", () => {
+  for (const kind of ["interview-prep", "interview-plan"]) {
     const prompt = buildPrompt({ kind, ...ARGS, input: "not json" });
     assert.ok(prompt.length > 0, `${kind} must not throw on malformed input`);
   }

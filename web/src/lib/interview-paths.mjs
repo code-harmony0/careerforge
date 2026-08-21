@@ -1,6 +1,6 @@
 // web/src/lib/interview-paths.mjs
 //
-// Where a saved interview-prep/plan/offer-prep artifact goes, and how it merges
+// Where a saved interview-prep/plan artifact goes, and how it merges
 // with a file that already exists. Kept plain (no fs, no Next.js) so it can be
 // unit-tested directly — same split as pdf-paths.mjs. The route that calls this
 // owns fs.readFileSync/writeFileSync; this module only computes strings.
@@ -11,7 +11,6 @@ import { slugify } from "./pdf-paths.mjs";
 export const SECTION_HEADINGS = {
   "interview-prep": "Prep Brief",
   "interview-plan": "Prep Plan",
-  "offer-prep": "Negotiation",
 };
 
 /**

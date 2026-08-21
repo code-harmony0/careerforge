@@ -225,14 +225,14 @@ test("argValue: absent or dangling flags yield an empty string, not a crash", ()
   assert.equal(argValue(["--allowedTools"], "--allowedTools"), "");
 });
 
-test("KNOWN_KINDS: includes the three interview worker kinds", () => {
-  for (const kind of ["interview-prep", "interview-plan", "offer-prep"]) {
+test("KNOWN_KINDS: includes the two interview worker kinds", () => {
+  for (const kind of ["interview-prep", "interview-plan"]) {
     assert.ok(KNOWN_KINDS.includes(kind), `KNOWN_KINDS must list ${kind}`);
   }
 });
 
-test("toolScopeFor: the three interview kinds are read-only, same scope as research", () => {
-  for (const kind of ["interview-prep", "interview-plan", "offer-prep"]) {
+test("toolScopeFor: the two interview kinds are read-only, same scope as research", () => {
+  for (const kind of ["interview-prep", "interview-plan"]) {
     assert.equal(toolScopeFor(kind), TOOL_SCOPES.readOnly, `${kind} must be read-only`);
   }
 });

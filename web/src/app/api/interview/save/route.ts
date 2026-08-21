@@ -1,7 +1,7 @@
 // web/src/app/api/interview/save/route.ts
 //
 // The ONLY writer of interview-prep/{company}-{role}.md for web-triggered runs.
-// interview-prep, interview-plan, and offer-prep all run with no Write/Bash tool
+// interview-prep and interview-plan both run with no Write/Bash tool
 // (see claude-invocation.mjs) — the agent's output is data the client already
 // has (job.text after a "done" stream); this route just persists it, the same
 // division of labor pdf-render.mjs uses for the PDF envelope (#2185).

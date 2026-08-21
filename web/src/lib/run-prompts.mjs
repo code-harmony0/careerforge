@@ -38,8 +38,8 @@ export function isShellSafeCompanyName(name) {
 const SAFE_COMPANY_NAME = /^[\p{L}\p{N} .,&'()+/-]+$/u;
 
 /**
- * Parse a worker `input` that is expected to be a JSON object (interview-prep,
- * interview-plan, offer-prep all pack company/role/etc into one JSON string
+ * Parse a worker `input` that is expected to be a JSON object (interview-prep
+ * and interview-plan both pack company/role/etc into one JSON string
  * since buildPrompt's signature only carries one `input` string). Never throws:
  * a malformed/legacy string degrades to `{}` so a bad input produces a
  * best-effort prompt instead of a 500.
@@ -218,22 +218,6 @@ End with EXACTLY one final line: VERDICT: {0-5 how complete this prep pack is}/5
 3. Produce the full time-blocked plan (Step 3) and the 15-minute quick-reference (Step 4), per modes/interview/plan.md's template.${jdBlock}${mem}${concise}
 
 End with EXACTLY one final line: VERDICT: {0-5 how ready this plan makes the candidate}/5 — {the single highest-priority block, ≤12 words}`;
-  }
-  if (kind === "offer-prep") {
-    const { company, role, contractText } = safeParseJson(input);
-    const companyLine = company ? String(company) : "(company not given)";
-    const roleLine = role ? String(role) : "(role not given)";
-    const contractBlock = contractText ? String(contractText) : "(no contract text was provided — say so and stop rather than inventing clauses)";
-    return `You are running the career-ops "offer-prep" mode, headless, on the user's own machine, for ${companyLine} — ${roleLine}. This mode PREPARES the candidate for their own decision — it describes clauses in plain English, it NEVER rates them with severity levels, scores, or a recommendation to sign. Follow modes/offer-prep.md's clause taxonomy and structure exactly, but SKIP its interactive checkpoints (the extraction-gate confirmation, the promises-intake question, asking for referenced documents) since no one is present to answer them in a headless run — proceed with your own best-effort read of the pasted text instead, and list any assumption or unconfirmed item in a short "Assumptions" section right after the header. If the contract is not in English, stop per the mode's language gate and say so plainly instead of proceeding.
-
-1. Read modes/offer-prep.md, cv.md, config/profile.yml, and any matching evaluation report/tracker row for company/role context.
-2. Run the clause walk (Step 2, describe-don't-judge), consistency check (Step 3), and two-lists output (Step 4: questions for a lawyer, items to raise with the employer) against the contract text below.
-3. Never assign a severity rating, a numeric score, or a sign/don't-sign recommendation to any clause — that judgment belongs to the candidate and their lawyer, not this output.
-
-Contract/offer text:
-${contractBlock}${mem}${concise}
-
-End with EXACTLY one final line, which scores how COMPLETE and ready-to-discuss this walkthrough is — never rate the offer itself: VERDICT: {0-5 how complete this walkthrough is}/5 — {the single most important thing to raise with a lawyer, ≤12 words}`;
   }
   // The posting date is INTERPOLATED, not asked for. The scanner wrote it into
   // pipeline.md from the provider's own `offer.postedAt`; the server already has
