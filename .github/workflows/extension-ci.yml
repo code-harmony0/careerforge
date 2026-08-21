@@ -1,0 +1,31 @@
+name: Extension CI
+
+# CI for the browser extension (extension/). Path-scoped like Web CI: it
+# never triggers on core changes, and core changes never trigger it.
+on:
+  pull_request:
+    paths:
+      - 'extension/**'
+      - '.github/workflows/extension-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'extension/**'
+      - '.github/workflows/extension-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    name: extension tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node --test tests/*.test.mjs
