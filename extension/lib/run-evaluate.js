@@ -29,34 +29,39 @@ export async function runEvaluate({ serverUrl, cliId, url, onText }) {
   let text = "";
   let verdictLine = "";
   let reportNum;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let nl;
-    while ((nl = buf.indexOf("\n")) !== -1) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line) continue;
-      let ev;
-      try {
-        ev = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (ev.type === "text") {
-        const full = text + ev.text;
-        const vm = full.match(/VERDICT:[^\n]*/i);
-        if (vm) verdictLine = vm[0];
-        text = full.slice(-4000);
-        onText(text);
-      } else if (ev.type === "done" && typeof ev.reportNum === "string") {
-        reportNum = ev.reportNum;
-      } else if (ev.type === "error") {
-        onText(`Error: ${ev.msg || "unknown"}`);
-        return;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        let ev;
+        try {
+          ev = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (ev.type === "text") {
+          const full = text + ev.text;
+          const vm = full.match(/VERDICT:[^\n]*/i);
+          if (vm) verdictLine = vm[0];
+          text = full.slice(-4000);
+          onText(text);
+        } else if (ev.type === "done" && typeof ev.reportNum === "string") {
+          reportNum = ev.reportNum;
+        } else if (ev.type === "error") {
+          onText(`Error: ${ev.msg || "unknown"}`);
+          return;
+        }
       }
     }
+  } catch {
+    onText("\n\n[connection lost during evaluation]");
+    return;
   }
 
   const { score, summary } = parseVerdict(verdictLine || text);

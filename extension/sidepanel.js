@@ -11,6 +11,8 @@ const sendEl = document.getElementById("send");
 let history = [];
 let serverUrl = DEFAULT_SERVER;
 let cliId = "";
+let activeCapture = null;
+let busy = false;
 
 function addMessage(role, text) {
   const div = document.createElement("div");
@@ -37,7 +39,7 @@ async function openCareerOpsTab(path) {
 async function executeEnvelope(env) {
   let args = {};
   try {
-    args = JSON.parse(env.argsJson.replace(/[""]/g, '"').replace(/['']/g, "'"));
+    args = JSON.parse(env.argsJson.replace(/[“”]/g, '"').replace(/[‘’]/g, "'"));
   } catch {
     /* malformed args — fall through with {} */
   }
@@ -52,43 +54,56 @@ async function executeEnvelope(env) {
 }
 
 async function send(message) {
-  const userDiv = addMessage("user", message);
-  void userDiv;
-  history.push({ role: "user", content: message });
-  const assistantDiv = addMessage("assistant", "…");
+  if (busy) return;
+  busy = true;
+  inputEl.disabled = true;
+  sendEl.disabled = true;
+  try {
+    const userDiv = addMessage("user", message);
+    void userDiv;
+    history.push({ role: "user", content: message });
+    const assistantDiv = addMessage("assistant", "…");
 
-  const { pendingCapture } = await chrome.storage.session.get("pendingCapture");
-  const pageContext = pendingCapture
-    ? `CAPTURED PAGE (from the browser extension, read while the user was viewing it):\nURL: ${pendingCapture.url}\nTitle: ${pendingCapture.title}\n\n${pendingCapture.text}`
-    : undefined;
+    const pageContext = activeCapture
+      ? `CAPTURED PAGE (from the browser extension, read while the user was viewing it):\nURL: ${activeCapture.url}\nTitle: ${activeCapture.title}\n\n${activeCapture.text}`
+      : undefined;
 
-  const res = await fetch(`${serverUrl}/api/assistant`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, cliId, history: history.slice(-8), pageContext }),
-  });
-  if (!res.ok || !res.body) {
-    assistantDiv.textContent = "career-ops isn't reachable — is `npm run dev` running in web/?";
-    return;
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let full = "";
-  let executedUpTo = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    full += decoder.decode(value, { stream: true });
-    const { complete } = parseEnvelopes(full);
-    assistantDiv.textContent = stripEnvelopes(full, complete);
-    for (const env of complete) {
-      if (env.start < executedUpTo) continue;
-      executedUpTo = env.end;
-      await executeEnvelope(env);
+    const res = await fetch(`${serverUrl}/api/assistant`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, cliId, history: history.slice(-8), pageContext }),
+    });
+    if (!res.ok || !res.body) {
+      assistantDiv.textContent = "career-ops isn't reachable — is `npm run dev` running in web/?";
+      return;
     }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = "";
+    let executedUpTo = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        full += decoder.decode(value, { stream: true });
+        const { complete } = parseEnvelopes(full);
+        assistantDiv.textContent = stripEnvelopes(full, complete);
+        for (const env of complete) {
+          if (env.start < executedUpTo) continue;
+          executedUpTo = env.end;
+          await executeEnvelope(env);
+        }
+      }
+    } catch {
+      assistantDiv.textContent = `${assistantDiv.textContent}\n\n[connection lost while streaming]`;
+    }
+    history.push({ role: "assistant", content: assistantDiv.textContent });
+  } finally {
+    busy = false;
+    inputEl.disabled = false;
+    sendEl.disabled = false;
   }
-  history.push({ role: "assistant", content: assistantDiv.textContent });
 }
 
 sendEl.addEventListener("click", () => {
@@ -110,7 +125,9 @@ inputEl.addEventListener("keydown", (e) => {
   }
 
   const { pendingCapture } = await chrome.storage.session.get("pendingCapture");
+  await chrome.storage.session.remove("pendingCapture");
   if (pendingCapture) {
+    activeCapture = pendingCapture;
     bannerEl.textContent = `Captured: ${pendingCapture.title || pendingCapture.url}`;
     bannerEl.classList.remove("hidden");
     if (cliId) send("Evaluate this job.");
