@@ -120,6 +120,32 @@ test("buildPrompt: interview-prep/interview-plan survive malformed JSON input", 
   }
 });
 
+test("buildPrompt: interview-prep accepts a bare report number and reads the report directly", () => {
+  const prompt = buildPrompt({ kind: "interview-prep", input: "042", memory: "", today: "2026-08-04" });
+  assert.match(prompt, /reports\/042-\*\.md/);
+  assert.match(prompt, /modes\/interview-prep\.md/);
+});
+
+test("buildPrompt: interview-plan accepts a bare report number and reads the report directly", () => {
+  const prompt = buildPrompt({ kind: "interview-plan", input: "042", memory: "", today: "2026-08-04" });
+  assert.match(prompt, /reports\/042-\*\.md/);
+  assert.match(prompt, /modes\/interview\/plan\.md/);
+});
+
+test("buildPrompt: interview-prep still supports manual JSON input (no report number)", () => {
+  const input = JSON.stringify({ company: "Acme Corp", role: "Staff Engineer" });
+  const prompt = buildPrompt({ kind: "interview-prep", input, memory: "", today: "2026-08-04" });
+  assert.match(prompt, /Acme Corp/);
+  assert.ok(!/reports\//.test(prompt) || prompt.includes("interview-prep.md"), "manual path must not require a report file");
+});
+
+test("buildPrompt: interview-prep reads question-bank.md and avoids re-asking covered questions", () => {
+  const input = JSON.stringify({ company: "Acme Corp", role: "Staff Engineer" });
+  const prompt = buildPrompt({ kind: "interview-prep", input, memory: "", today: "2026-08-04" });
+  assert.match(prompt, /question-bank\.md/);
+  assert.match(prompt, /don't re-ask|never re-ask|avoid re-asking/i);
+});
+
 test("buildPrompt: memory is injected only when non-empty", () => {
   // Given a profile note, and given none
   const withMem = buildPrompt({ kind: "evaluate", input: "x", memory: "  Prefers remote.  ", today: "2026-08-04" });

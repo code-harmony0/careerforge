@@ -197,6 +197,32 @@ If NO slug variant resolves, say so clearly and leave portals.yml unchanged. Nev
 End with EXACTLY one final line: VERDICT: {5 if now live, else 1}/5 — {what you changed, ≤12 words}`;
   }
   if (kind === "interview-prep" || kind === "interview-plan") {
+    // `input` is either a bare report number (from the pipeline picker or
+    // paste-a-link chaining — see docs/plans/2026-08-21-interview-ui-v2.md
+    // Task 1) or a manual-entry JSON blob {company, role, jd, date}. The two
+    // shapes never mix: a report number means "go read the canonical report
+    // for company/role/JD", same convention deep/cover/training already use
+    // for reports/${input}-*.md, so there is no "(company not given)"
+    // placeholder to fall back to — the report supplies it.
+    if (/^\d+$/.test(input)) {
+      const reportLine = `Read the evaluation report at reports/${input}-*.md for company, role, and JD context — do not ask for it, it is already there.`;
+      if (kind === "interview-prep") {
+        return `You are running the career-ops "interview-prep" mode, headless, on the user's own machine, for application #${input}. Follow modes/interview-prep.md's steps exactly.
+
+1. Read modes/interview-prep.md, cv.md, config/profile.yml, modes/_profile.md (if present), interview-prep/story-bank.md (if present) for existing prepared stories, and interview-prep/question-bank.md (if present) — never re-ask a question already marked covered/attempted there; surface it as "already asked" context instead of a fresh question. ${reportLine}
+2. Run its research step (WebSearch) for real, cited company/role intel — sourced questions get a citation, everything else is tagged [inferred from JD] per the mode's own tag conventions. Never invent company intel.
+3. Produce the full company research pack, likely-question analysis, and Step 5 story-bank mapping table, per modes/interview-prep.md's structure.${mem}${concise}
+
+End with EXACTLY one final line: VERDICT: {0-5 how complete this prep pack is}/5 — {the single most important gap to close, ≤12 words}`;
+      }
+      return `You are running the career-ops "interview/plan" mode, headless, on the user's own machine, for application #${input}. Follow modes/interview/plan.md's steps exactly. No interview date was given — build the plan around a generic 3-hour prep window instead of inventing a countdown.
+
+1. Read modes/interview/plan.md, cv.md, config/profile.yml, modes/_profile.md (if present), interview-prep/story-bank.md (if present), and interview-prep/question-bank.md (if present, for 🔴-flagged gaps that outrank inferred ones). ${reportLine}
+2. Run its fit assessment, round intelligence, and research-check steps for real — reuse interview-prep/{company-slug}-{role-slug}.md if it exists rather than re-searching.
+3. Produce the full time-blocked plan (Step 3) and the 15-minute quick-reference (Step 4), per modes/interview/plan.md's template.${mem}${concise}
+
+End with EXACTLY one final line: VERDICT: {0-5 how ready this plan makes the candidate}/5 — {the single highest-priority block, ≤12 words}`;
+    }
     const { company, role, jd, date } = safeParseJson(input);
     const companyLine = company ? String(company) : "(company not given)";
     const roleLine = role ? String(role) : "(role not given)";
@@ -204,7 +230,7 @@ End with EXACTLY one final line: VERDICT: {5 if now live, else 1}/5 — {what yo
     if (kind === "interview-prep") {
       return `You are running the career-ops "interview-prep" mode, headless, on the user's own machine, for ${companyLine} — ${roleLine}. Follow modes/interview-prep.md's steps exactly.
 
-1. Read modes/interview-prep.md, cv.md, config/profile.yml, modes/_profile.md (if present), and interview-prep/story-bank.md (if present) for existing prepared stories.
+1. Read modes/interview-prep.md, cv.md, config/profile.yml, modes/_profile.md (if present), interview-prep/story-bank.md (if present) for existing prepared stories, and interview-prep/question-bank.md (if present) — never re-ask a question already marked covered/attempted there; surface it as "already asked" context instead of a fresh question.
 2. Run its research step (WebSearch) for real, cited company/role intel — sourced questions get a citation, everything else is tagged [inferred from JD] per the mode's own tag conventions. Never invent company intel.
 3. Produce the full company research pack, likely-question analysis, and Step 5 story-bank mapping table, per modes/interview-prep.md's structure.${jdBlock}${mem}${concise}
 
