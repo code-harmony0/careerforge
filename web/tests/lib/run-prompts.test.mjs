@@ -73,7 +73,7 @@ test("buildPrompt: the pdf prompt still pins tailoring to the real mode", () => 
 
 test("buildPrompt: every kind ends with exactly one VERDICT instruction", () => {
   // Given each kind — job-store.tsx parses that final line client-side
-  for (const kind of ["pdf", "research", "evaluate", "fix-portal"]) {
+  for (const kind of ["pdf", "research", "evaluate", "fix-portal", "interview-prep", "interview-plan"]) {
     const prompt = buildPrompt({ kind, ...ARGS });
 
     // Then the contract is present exactly once, so the parse cannot pick a
@@ -89,6 +89,35 @@ test("buildPrompt: an unknown kind falls through to the evaluate prompt", () => 
   // Then it is the evaluation prompt (the documented default), not an empty string
   const prompt = buildPrompt({ kind: "some-future-kind", ...ARGS });
   assert.match(prompt, /OFFICIAL career-ops job evaluation/);
+});
+
+test("buildPrompt: interview-prep runs the real mode and requires cv.md context", () => {
+  const input = JSON.stringify({ company: "Acme Corp", role: "Staff Engineer", jd: "Some JD text." });
+  const prompt = buildPrompt({ kind: "interview-prep", ...ARGS, input });
+  assert.match(prompt, /modes\/interview-prep\.md/);
+  assert.match(prompt, /cv\.md/);
+  assert.match(prompt, /Acme Corp/);
+  assert.match(prompt, /Staff Engineer/);
+});
+
+test("buildPrompt: interview-plan runs the real mode and carries the interview date when given", () => {
+  const input = JSON.stringify({ company: "Acme Corp", role: "Staff Engineer", date: "2026-09-01T15:00" });
+  const prompt = buildPrompt({ kind: "interview-plan", ...ARGS, input });
+  assert.match(prompt, /modes\/interview\/plan\.md/);
+  assert.match(prompt, /2026-09-01T15:00/);
+});
+
+test("buildPrompt: interview-plan states no fixed date when omitted, not an invented one", () => {
+  const input = JSON.stringify({ company: "Acme Corp", role: "Staff Engineer" });
+  const prompt = buildPrompt({ kind: "interview-plan", ...ARGS, input });
+  assert.match(prompt, /no interview date was given/i);
+});
+
+test("buildPrompt: interview-prep/interview-plan survive malformed JSON input", () => {
+  for (const kind of ["interview-prep", "interview-plan"]) {
+    const prompt = buildPrompt({ kind, ...ARGS, input: "not json" });
+    assert.ok(prompt.length > 0, `${kind} must not throw on malformed input`);
+  }
 });
 
 test("buildPrompt: memory is injected only when non-empty", () => {

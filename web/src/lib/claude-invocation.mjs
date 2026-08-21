@@ -91,7 +91,7 @@ const PERSISTING_KINDS = new Set(["evaluate", "fix-portal"]);
  * Unknown kinds still resolve (read-only, see toolScopeFor); this is the set a
  * test can enumerate, not a validity check.
  */
-export const KNOWN_KINDS = Object.freeze(["pdf", "research", "evaluate", "fix-portal"]);
+export const KNOWN_KINDS = Object.freeze(["pdf", "research", "evaluate", "fix-portal", "interview-prep", "interview-plan"]);
 
 /**
  * Resolve the tool scope for a worker kind.

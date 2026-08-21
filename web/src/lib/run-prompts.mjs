@@ -38,6 +38,25 @@ export function isShellSafeCompanyName(name) {
 const SAFE_COMPANY_NAME = /^[\p{L}\p{N} .,&'()+/-]+$/u;
 
 /**
+ * Parse a worker `input` that is expected to be a JSON object (interview-prep
+ * and interview-plan both pack company/role/etc into one JSON string
+ * since buildPrompt's signature only carries one `input` string). Never throws:
+ * a malformed/legacy string degrades to `{}` so a bad input produces a
+ * best-effort prompt instead of a 500.
+ *
+ * @param {string} input
+ * @returns {Record<string, unknown>}
+ */
+function safeParseJson(input) {
+  try {
+    const parsed = JSON.parse(input);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
  * The exact prompt each worker kind is sent.
  *
  * Lives in a plain .mjs so it can be asserted on as a VALUE: the pdf prompt is
@@ -176,6 +195,29 @@ After the envelope, end with EXACTLY one final line: VERDICT: {5 if the complete
 If NO slug variant resolves, say so clearly and leave portals.yml unchanged. Never touch any other company. This is a config repair: do not submit, send, or click Apply anywhere, and edit no file other than portals.yml.
 
 End with EXACTLY one final line: VERDICT: {5 if now live, else 1}/5 — {what you changed, ≤12 words}`;
+  }
+  if (kind === "interview-prep" || kind === "interview-plan") {
+    const { company, role, jd, date } = safeParseJson(input);
+    const companyLine = company ? String(company) : "(company not given)";
+    const roleLine = role ? String(role) : "(role not given)";
+    const jdBlock = jd ? `\n\nJob description:\n${String(jd)}` : "";
+    if (kind === "interview-prep") {
+      return `You are running the career-ops "interview-prep" mode, headless, on the user's own machine, for ${companyLine} — ${roleLine}. Follow modes/interview-prep.md's steps exactly.
+
+1. Read modes/interview-prep.md, cv.md, config/profile.yml, modes/_profile.md (if present), and interview-prep/story-bank.md (if present) for existing prepared stories.
+2. Run its research step (WebSearch) for real, cited company/role intel — sourced questions get a citation, everything else is tagged [inferred from JD] per the mode's own tag conventions. Never invent company intel.
+3. Produce the full company research pack, likely-question analysis, and Step 5 story-bank mapping table, per modes/interview-prep.md's structure.${jdBlock}${mem}${concise}
+
+End with EXACTLY one final line: VERDICT: {0-5 how complete this prep pack is}/5 — {the single most important gap to close, ≤12 words}`;
+    }
+    const dateLine = date ? `Interview date/time: ${String(date)}.` : "No interview date was given — build the plan around a generic 3-hour prep window instead of inventing a countdown.";
+    return `You are running the career-ops "interview/plan" mode, headless, on the user's own machine, for ${companyLine} — ${roleLine}. Follow modes/interview/plan.md's steps exactly. ${dateLine}
+
+1. Read modes/interview/plan.md, cv.md, config/profile.yml, modes/_profile.md (if present), interview-prep/story-bank.md (if present), and interview-prep/question-bank.md (if present, for 🔴-flagged gaps that outrank inferred ones).
+2. Run its fit assessment, round intelligence, and research-check steps for real — reuse interview-prep/{company-slug}-{role-slug}.md if it exists rather than re-searching.
+3. Produce the full time-blocked plan (Step 3) and the 15-minute quick-reference (Step 4), per modes/interview/plan.md's template.${jdBlock}${mem}${concise}
+
+End with EXACTLY one final line: VERDICT: {0-5 how ready this plan makes the candidate}/5 — {the single highest-priority block, ≤12 words}`;
   }
   // The posting date is INTERPOLATED, not asked for. The scanner wrote it into
   // pipeline.md from the provider's own `offer.postedAt`; the server already has
