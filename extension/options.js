@@ -9,12 +9,20 @@ async function load() {
   try {
     const res = await fetch(`${serverUrl}/api/clis`);
     const clis = await res.json();
-    select.innerHTML = (Array.isArray(clis) ? clis : clis.clis || [])
-      .map((c) => `<option value="${c.id}">${c.name || c.id}</option>`)
-      .join("");
+    select.innerHTML = "";
+    for (const c of Array.isArray(clis) ? clis : clis.clis || []) {
+      const option = document.createElement("option");
+      option.value = c.id;
+      option.textContent = c.name || c.id;
+      select.appendChild(option);
+    }
     if (cliId) select.value = cliId;
   } catch {
-    select.innerHTML = `<option value="">could not reach ${serverUrl} — is career-ops running?</option>`;
+    select.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = `could not reach ${serverUrl} — is career-ops running?`;
+    select.appendChild(option);
   }
 }
 
