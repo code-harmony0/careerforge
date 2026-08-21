@@ -68,11 +68,17 @@ async function send(message) {
       ? `CAPTURED PAGE (from the browser extension, read while the user was viewing it):\nURL: ${activeCapture.url}\nTitle: ${activeCapture.title}\n\n${activeCapture.text}`
       : undefined;
 
-    const res = await fetch(`${serverUrl}/api/assistant`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, cliId, history: history.slice(-8), pageContext }),
-    });
+    let res;
+    try {
+      res = await fetch(`${serverUrl}/api/assistant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, cliId, history: history.slice(-8), pageContext }),
+      });
+    } catch {
+      assistantDiv.textContent = "career-ops isn't reachable — is `npm run dev` running in web/?";
+      return;
+    }
     if (!res.ok || !res.body) {
       assistantDiv.textContent = "career-ops isn't reachable — is `npm run dev` running in web/?";
       return;
