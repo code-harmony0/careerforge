@@ -170,7 +170,7 @@ export function InterviewForm() {
   }, [evaluateJob, startJob]);
 
   async function save() {
-    if (!activeJob || !activeJob.kind || activeJob.status !== "done" || !savedFor) return;
+    if (!activeJob || !activeJob.kind || activeJob.status !== "done" || !savedFor?.company || !savedFor?.role) return;
     setSaveState("saving");
     try {
       const res = await fetch("/api/interview/save", {
@@ -299,18 +299,7 @@ export function InterviewForm() {
               <p className="text-xs font-medium text-muted">2. Prep brief</p>
               <p className="mt-1 text-xs text-faint">{prepJob.status === "running" ? "Running…" : prepJob.status}</p>
               <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap text-sm">{prepJob.text}</pre>
-              {prepJob.status === "done" && (
-                <>
-                  <button
-                    onClick={save}
-                    disabled={saveState === "saving" || saveState === "saved"}
-                    className="mt-2 rounded-full border border-border px-3 py-1 text-xs font-medium transition-colors hover:border-brand/50 disabled:opacity-60"
-                  >
-                    {saveState === "saved" ? "Saved to interview-prep/" : saveState === "saving" ? "Saving…" : "Save to interview-prep/"}
-                  </button>
-                  {saveState === "error" && <p className="mt-1 text-xs text-red-400">Save failed — try again.</p>}
-                </>
-              )}
+              <SaveBlock job={prepJob} savedFor={savedFor} saveState={saveState} onSave={save} />
             </div>
           )}
         </div>
@@ -370,18 +359,7 @@ export function InterviewForm() {
         <div className="mt-4 rounded-lg border border-border bg-surface/50 p-3">
           <p className="text-xs text-faint">{activeJob.status === "running" ? "Running…" : activeJob.status}</p>
           <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap text-sm">{activeJob.text}</pre>
-          {activeJob.status === "done" && (
-            <>
-              <button
-                onClick={save}
-                disabled={saveState === "saving" || saveState === "saved"}
-                className="mt-2 rounded-full border border-border px-3 py-1 text-xs font-medium transition-colors hover:border-brand/50 disabled:opacity-60"
-              >
-                {saveState === "saved" ? "Saved to interview-prep/" : saveState === "saving" ? "Saving…" : "Save to interview-prep/"}
-              </button>
-              {saveState === "error" && <p className="mt-1 text-xs text-red-400">Save failed — try again.</p>}
-            </>
-          )}
+          <SaveBlock job={activeJob} savedFor={savedFor} saveState={saveState} onSave={save} />
         </div>
       )}
 
@@ -398,6 +376,11 @@ export function InterviewForm() {
                     setActiveJobId(j.id);
                     setSaveState("idle");
                     setSavedFor(deriveSavedFor(j));
+                    // The generic results panel below is only shown outside
+                    // "link" mode (link mode has its own two-step evaluate/prep
+                    // panel keyed off evaluateJobId/prepJobId, not activeJobId) —
+                    // switch off it so a history pick always renders somewhere.
+                    if (mode === "link") setMode("manual");
                   }}
                   className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:border-brand/50"
                 >
@@ -413,11 +396,65 @@ export function InterviewForm() {
 }
 
 // Reopening a past job from history needs a {company, role} snapshot for Save
-// to keep working — derive it from the job's own subtitle ("Company — Role")
-// since that's the only company/role data a Job record carries.
+// to keep working. A Job record doesn't carry company/role as its own fields,
+// so recover them from whichever source is reliable for that job's mode:
+//  - manual-mode jobs pack {company, role} directly into `input` as JSON —
+//    parse that first, it's exact.
+//  - pipeline/link-mode jobs pack a bare report number into `input` instead,
+//    so fall back to the "Company — Role" subtitle text those modes write.
+// Returns null when neither source parses (e.g. the "report #042" fallback
+// subtitle used when a chained job's pipeline lookup came back empty) — the
+// SaveBlock below treats null the same as a blank company/role and shows an
+// explicit "can't save this" message instead of silently doing nothing.
 function deriveSavedFor(j: Job): { company: string; role: string } | null {
+  if (j.input) {
+    try {
+      const parsed = JSON.parse(j.input);
+      if (parsed && typeof parsed.company === "string" && typeof parsed.role === "string") {
+        return { company: parsed.company, role: parsed.role };
+      }
+    } catch {
+      /* not JSON — pipeline/link-mode jobs pack a bare report number instead */
+    }
+  }
   const subtitle = j.subtitle || "";
   const sep = subtitle.indexOf(" — ");
   if (sep === -1) return null;
   return { company: subtitle.slice(0, sep), role: subtitle.slice(sep + 3) };
+}
+
+// Shared Save button + status line for a finished job, used by both the
+// paste-a-link mode's own "2. Prep brief" panel and the generic results
+// panel (pipeline/manual modes, and history reopens). Renders nothing until
+// the job is done; once done, shows the Save button only when savedFor has a
+// real company AND role — a present-but-blank snapshot (e.g. the chained
+// job's pipeline lookup came back empty) gets an explicit explanation instead
+// of a button that would just fail after clicking.
+function SaveBlock({
+  job,
+  savedFor,
+  saveState,
+  onSave,
+}: {
+  job: Job;
+  savedFor: { company: string; role: string } | null;
+  saveState: "idle" | "saving" | "saved" | "error";
+  onSave: () => void;
+}) {
+  if (job.status !== "done") return null;
+  if (!savedFor?.company || !savedFor?.role) {
+    return <p className="mt-2 text-xs text-faint">Couldn&apos;t resolve company/role for this report — save isn&apos;t available.</p>;
+  }
+  return (
+    <>
+      <button
+        onClick={onSave}
+        disabled={saveState === "saving" || saveState === "saved"}
+        className="mt-2 rounded-full border border-border px-3 py-1 text-xs font-medium transition-colors hover:border-brand/50 disabled:opacity-60"
+      >
+        {saveState === "saved" ? "Saved to interview-prep/" : saveState === "saving" ? "Saving…" : "Save to interview-prep/"}
+      </button>
+      {saveState === "error" && <p className="mt-1 text-xs text-red-400">Save failed — try again.</p>}
+    </>
+  );
 }
