@@ -1,7 +1,9 @@
 // extension/tests/extract.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { collapseWhitespace, capText } from "../lib/extract.js";
+import "../lib/extract.js";
+
+const { collapseWhitespace, capText } = globalThis.careerOpsExtract;
 
 test("collapseWhitespace squashes runs of whitespace to single spaces", () => {
   assert.equal(collapseWhitespace("a\n\n  b\t\tc"), "a b c");
