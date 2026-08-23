@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft, FileText, ExternalLink, ChevronDown } from "lucide-react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownComponents } from "@/components/markdown-components";
 import type { Application } from "@/lib/career-ops";
 import { Badge } from "@/components/ui/badge";
 import { scoreTone, scoreNum, legitimacyTone, parseReport } from "@/lib/format";
@@ -31,27 +32,6 @@ import { OutcomeButton } from "@/components/outcome-button";
 
 // Machine artifacts (collapsed because they're for devs, not the mainstream) vs
 // human content C–G (collapsed only for length) — ux's "honest for devs" tier.
-// Evaluation-table rows (STAR+R Story, Match with CV, ...) run up to eight
-// columns of real prose, not short data cells — squeezed to the prose column's
-// reading width they crush to one word per line.
-//
-// The floor is on the CELLS, not the table. A table-level min-width has to be
-// chosen for the worst case, and then the two-column "Field | Value" tables in
-// the same report inherit it and scroll for nothing. Per-cell scales with the
-// column count by itself: two columns stay inside the reading width, eight add
-// up past it and the container scrolls. Measured on report 037 — 8 cols at
-// 1024px against an 806px container (scrolls), every 2-5 column table fits.
-//
-// The table scrolls rather than the page widening: widening far enough for
-// eight prose columns would push the report's own prose past a readable
-// measure, trading one problem for another.
-const markdownComponents: Components = {
-  table: ({ children }) => (
-    <div className="my-4 overflow-x-auto rounded-lg border border-border">
-      <table className="w-full [&_td]:min-w-32 [&_th]:min-w-32">{children}</table>
-    </div>
-  ),
-};
 
 function isMachine(heading: string): boolean {
   return /machine summary|submitted|submit[-\s]?log/i.test(heading);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownComponents } from "@/components/markdown-components";
 import { ArrowLeft, Loader2, Wrench, CircleDot, Check, X, RotateCcw, FileText } from "lucide-react";
 import { useJobs } from "@/components/jobs/job-store";
 import { HeroGlow } from "@/components/hero-glow";
@@ -108,7 +109,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
         <div className="mt-8">
           <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Output</h2>
           <div className="report-prose mt-3 rounded-2xl border border-border bg-surface/40 p-5">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.text}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{job.text}</ReactMarkdown>
           </div>
         </div>
       )}
