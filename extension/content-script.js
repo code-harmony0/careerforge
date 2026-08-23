@@ -25,3 +25,20 @@
     });
   });
 })();
+
+// Answers the side panel's request to read THIS tab's form fields directly —
+// the whole point being that it's the user's actual, already-authenticated
+// tab, not a second browser with no session (see lib/extract-form.js's
+// header). Guarded so a re-injected content script doesn't stack listeners.
+if (!self.__coFormListenerInstalled) {
+  self.__coFormListenerInstalled = true;
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg?.type !== "career-ops:extract-form") return false;
+    try {
+      sendResponse({ ok: true, form: self.careerOpsExtract.extractFormFields(document) });
+    } catch (e) {
+      sendResponse({ ok: false, error: String(e?.message || e) });
+    }
+    return false; // synchronous response — no keepalive needed
+  });
+}

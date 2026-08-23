@@ -3,13 +3,13 @@
   "name": "career-ops bridge",
   "version": "0.1.0",
   "description": "Capture the job posting you're viewing and send it to your local career-ops assistant.",
-  "permissions": ["storage", "tabs", "sidePanel", "activeTab"],
+  "permissions": ["storage", "tabs", "sidePanel", "activeTab", "contextMenus"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["lib/extract.js", "content-script.js"],
+      "js": ["lib/extract.js", "lib/extract-form.js", "content-script.js"],
       "css": ["content-script.css"],
       "run_at": "document_idle"
     }

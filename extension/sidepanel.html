@@ -7,38 +7,82 @@
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
-    <div id="capture-card" class="hidden">
-      <div id="capture-title"></div>
-      <div id="capture-url"></div>
-      <div id="capture-warning" class="hidden">
-        This looks like a list of jobs, not one posting — results will be noisy.
-        <span id="evaluate-anyway" class="action-link">Evaluate anyway</span>
+    <header id="app-header">
+      <span id="app-logo">co</span>
+      <span id="app-title">career-ops</span>
+    </header>
+
+    <div id="scroll-area">
+      <div id="capture-card" class="hidden">
+        <div id="capture-title"></div>
+        <div id="capture-url"></div>
+        <div id="capture-warning" class="hidden">
+          This looks like a list of jobs, not one posting — results will be noisy.
+          <span id="evaluate-anyway" class="action-link">Evaluate anyway</span>
+        </div>
+        <div id="capture-actions" class="hidden">
+          <button id="capture-evaluate" class="action-btn" type="button"><span class="action-icon">📊</span>Evaluate this posting</button>
+          <button id="capture-fill" class="action-btn" type="button"><span class="action-icon">📝</span>Fill out form</button>
+        </div>
       </div>
+
+      <div id="status-row" class="hidden">
+        <span class="spinner"></span>
+        <span id="status-text"></span>
+        <span id="stop-eval" class="action-link">Stop</span>
+      </div>
+
+      <div id="result-card" class="hidden">
+        <div id="score-badge"></div>
+        <div id="result-summary"></div>
+        <a id="open-report" class="hidden" target="_blank" rel="noopener">Open full report →</a>
+        <div id="result-actions" class="hidden">
+          <button id="action-pdf" class="action-btn" type="button"><span class="action-icon">📄</span>Tailor resume</button>
+          <button id="action-apply" class="action-btn" type="button"><span class="action-icon">📝</span>Fill out form</button>
+          <button id="action-cover" class="action-btn" type="button"><span class="action-icon">✉️</span>Cover letter</button>
+          <button id="action-status" class="action-btn" type="button"><span class="action-icon">🏷️</span>Update status</button>
+        </div>
+
+        <div id="action-panel" class="hidden">
+          <div id="action-panel-status" class="hidden">
+            <span class="spinner"></span>
+            <span id="action-panel-status-text"></span>
+            <span id="action-panel-stop" class="action-link">Stop</span>
+          </div>
+          <div id="action-panel-error" class="hidden"></div>
+          <div id="action-panel-body"></div>
+        </div>
+      </div>
+
+      <div id="error-card" class="hidden">
+        <div id="error-text"></div>
+        <span id="retry" class="action-link">Retry</span>
+      </div>
+
+      <div id="empty-state">
+        <p id="empty-hint">Click the <strong>career-ops</strong> pill on a job posting to capture it automatically — or act on whichever tab is active right now:</p>
+        <div id="landing-actions">
+          <button id="landing-evaluate" class="action-btn" type="button"><span class="action-icon">📊</span>Evaluate this tab</button>
+          <button id="landing-apply" class="action-btn" type="button"><span class="action-icon">📝</span>Fill out form on this tab</button>
+        </div>
+        <div id="landing-url-row">
+          <input id="landing-url-input" type="text" placeholder="…or paste any application link" />
+          <button id="landing-url-fill" type="button">Fill out form</button>
+        </div>
+      </div>
+
+      <div id="messages"></div>
     </div>
 
-    <div id="status-row" class="hidden">
-      <span class="spinner"></span>
-      <span id="status-text"></span>
+    <div id="attachment-preview" class="hidden">
+      <img id="attachment-thumb" alt="attached image" />
+      <span id="attachment-draft-form" class="action-link hidden">Draft form answers for this page</span>
+      <span id="attachment-remove" class="action-link">Remove</span>
     </div>
-
-    <div id="result-card" class="hidden">
-      <div id="score-badge"></div>
-      <div id="result-summary"></div>
-      <a id="open-report" class="hidden" target="_blank" rel="noopener">Open full report →</a>
-    </div>
-
-    <div id="error-card" class="hidden">
-      <div id="error-text"></div>
-      <span id="retry" class="action-link">Retry</span>
-    </div>
-
-    <div id="empty-state">
-      Click the <strong>career-ops</strong> pill on a job posting to capture and evaluate it here — or ask a question below.
-    </div>
-
-    <div id="messages"></div>
-
     <div id="composer">
+      <input id="file-input" type="file" accept="image/*" class="hidden" />
+      <button id="attach-btn" type="button" title="Attach an image">📎</button>
+      <button id="screenshot-btn" type="button" title="Capture this tab">📷</button>
       <input id="input" placeholder="Ask career-ops…" />
       <button id="send">Send</button>
     </div>

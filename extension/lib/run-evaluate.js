@@ -9,15 +9,30 @@ import { parseVerdict } from "./verdict.js";
 //   onStatus(label)              — a short human-readable progress line
 //   onDone({score, summary, reportNum, reportUrl})
 //   onError(message)
-export async function runEvaluate({ serverUrl, cliId, url, onStatus, onDone, onError }) {
+//   onAborted()                  — signal was aborted (user hit Stop); not an error
+//
+// `signal` is forwarded to fetch AND checked against the reader loop's own
+// catch, because aborting can surface as the fetch() call throwing (not
+// started yet) or as reader.read() throwing (mid-stream) depending on
+// timing — both need to route to onAborted, not onError, or Stop would
+// render as a failure. Aborting the fetch also tears down the server's
+// ReadableStream, whose cancel() (web/src/app/api/run/route.ts) kills the
+// underlying CLI child process — so Stop actually stops the work, not just
+// the UI.
+export async function runEvaluate({ serverUrl, cliId, url, signal, onStatus, onDone, onError, onAborted }) {
   let res;
   try {
     res = await fetch(`${serverUrl}/api/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind: "evaluate", input: url, cliId }),
+      signal,
     });
-  } catch {
+  } catch (e) {
+    if (e?.name === "AbortError") {
+      onAborted?.();
+      return;
+    }
     onError("Could not reach career-ops to start the evaluation.");
     return;
   }
@@ -38,7 +53,10 @@ export async function runEvaluate({ serverUrl, cliId, url, onStatus, onDone, onE
   let buf = "";
   let text = "";
   let verdictLine = "";
-  let reportNum;
+  let reportNum; // the REPORT FILE number (reports/{n}-...md) — for pdf/cover job `input`
+  let appN; // the TRACKER ROW number — separate, diverging counter (see career-ops.ts's
+  // findApplicationByReportNum) — for anything that navigates/writes by application #
+  // (StatusSelect, /api/status, /pipeline/{n})
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -67,22 +85,36 @@ export async function runEvaluate({ serverUrl, cliId, url, onStatus, onDone, onE
           onStatus("Writing the report…");
         } else if (ev.type === "done" && typeof ev.reportNum === "string") {
           reportNum = ev.reportNum;
+          if (typeof ev.appN === "string") appN = ev.appN;
         } else if (ev.type === "error") {
           onError(ev.msg || "Evaluation failed.");
           return;
         }
       }
     }
-  } catch {
+  } catch (e) {
+    if (e?.name === "AbortError" || signal?.aborted) {
+      onAborted?.();
+      return;
+    }
     onError("Connection lost during evaluation.");
     return;
   }
 
   const { score, summary } = parseVerdict(verdictLine || text);
+  // /pipeline/{n} navigation wants the application (row) number, not the
+  // report file number — they usually coincide but are separate counters
+  // that can diverge (see career-ops.ts's findApplicationByReportNum). Fall
+  // back to reportNum only if appN genuinely never arrived (e.g. a non-Claude
+  // CLI run whose tracker-merge step the server couldn't confirm) — better a
+  // possibly-wrong link than none, and /pipeline/{n} degrades to a 404 rather
+  // than a silent write failure the way /api/status would.
+  const navN = appN || reportNum;
   onDone({
     score,
     summary,
     reportNum,
-    reportUrl: reportNum ? `${serverUrl}/pipeline/${reportNum}` : undefined,
+    appN: navN,
+    reportUrl: navN ? `${serverUrl}/pipeline/${navN}` : undefined,
   });
 }

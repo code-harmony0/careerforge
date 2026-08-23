@@ -17,7 +17,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   });
 
   chrome.storage.session
-    .set({ pendingCapture: { ...msg.capture, capturedAt: Date.now() } })
+    // tabId lets the panel read this SAME tab's live form fields directly
+    // later (draftFormForUrl's tab-read path) instead of falling back to a
+    // fresh, session-less browser for a URL it could otherwise just re-read.
+    .set({ pendingCapture: { ...msg.capture, tabId, capturedAt: Date.now() } })
     .then(() => sendResponse({ ok: true }))
     .catch((e) => sendResponse({ ok: false, error: String(e) }));
 
@@ -27,4 +30,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // Toolbar-icon click also opens the panel (without a capture) for ad-hoc chat.
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id != null) chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
+});
+
+// Screen capture: chrome.tabs.captureVisibleTab needs the "activeTab" grant,
+// which Chrome only issues for a genuine top-level user gesture (the action
+// icon, a keyboard command, or — this — a context menu selection). A button
+// click INSIDE the already-open side panel page does NOT qualify, so the
+// panel can't capture directly; this menu item is the real entry point.
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "career-ops-screenshot",
+    title: "career-ops: attach a screenshot of this page",
+    contexts: ["page", "selection", "image"],
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== "career-ops-screenshot" || tab?.id == null) return;
+  // Both calls fire synchronously within this gesture-triggered handler —
+  // same constraint as the capture listener above.
+  chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
+  chrome.tabs
+    .captureVisibleTab(tab.windowId, { format: "png" })
+    .then((dataUrl) => chrome.storage.session.set({ pendingScreenshot: { dataUrl, url: tab.url, tabId: tab.id, capturedAt: Date.now() } }))
+    .catch(() => {
+      /* denied, or the tab navigated away mid-capture — non-fatal, panel just gets nothing */
+    });
 });
