@@ -1,5 +1,6 @@
 # Personal data (user fills these)
 cv.md
+cv.pdf
 article-digest.md
 local/
 # Everything under data/ is generated or personal at runtime — only .gitkeep
@@ -159,3 +160,23 @@ data/intake-state.json
 
 # Local git worktrees for isolated feature work
 .worktrees/
+
+# Graphify output
+graphify-out/
+
+# ── Local debris that must never reach a public repo ─────────────────────────
+# firebase-debug.log carries live auth tokens on its very first line
+# ("Checked if tokens are valid: ... expires at: ..."), not just diagnostics.
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+
+# scratch/ holds raw CV payloads (real name, email, phone) built while
+# debugging the PDF pipeline — user PII by any reading of DATA_CONTRACT.md.
+scratch/
+
+# Root-level throwaway probes. Named so they can't be mistaken for the real
+# suite in tests/, but they still don't belong in the repo.
+/test-agy*.js
+/test-pw.mjs
