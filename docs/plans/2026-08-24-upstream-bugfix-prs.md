@@ -4,7 +4,7 @@
 
 **Goal:** Land the remaining bug fixes that santifer explicitly requested when he closed PR #3043, as separate focused PRs against `santifer/career-ops`, then return to careerforge work.
 
-**Architecture:** Each fix is its own branch off a freshly-fetched `upstream/main`, in the dedicated checkout at `/Users/codeaura/Projects/careerops-pr` — never in the careerforge working tree. One fix per PR, no lockfile churn, nothing riding along. This is the scope discipline whose absence got #3043 closed.
+**Architecture:** Each fix is its own branch off a freshly-fetched `upstream/main`, in the dedicated checkout at `../careerops-pr` — never in the careerforge working tree. One fix per PR, no lockfile churn, nothing riding along. This is the scope discipline whose absence got #3043 closed.
 
 **Tech Stack:** Next.js 16 / React 19 / TypeScript for `web/`, plain `.mjs` + `node:test` for logic, Tailwind v4 for styling, Playwright (`playwright-core`, already a `web/` dependency) for visual verification.
 
@@ -52,7 +52,7 @@ The web prompt this was originally fixed in (`run-prompts.mjs`'s contacto branch
 
 Run:
 ```bash
-cd /Users/codeaura/Projects/careerops-pr
+cd ../careerops-pr
 git fetch upstream --quiet && git checkout -q -b fix/web-report-table-width upstream/main
 grep -n 'max-w-3xl' web/src/components/report-view.tsx web/src/app/jobs/\[id\]/page.tsx
 grep -c 'overflow-x-auto' web/src/components/report-view.tsx
@@ -91,8 +91,8 @@ Expected: equal.
 **Step 6: Full verification**
 
 ```bash
-cd /Users/codeaura/Projects/careerops-pr/web && npm test && npx tsc --noEmit && npm run build
-cd /Users/codeaura/Projects/careerops-pr && node test-all.mjs
+cd ../careerops-pr/web && npm test && npx tsc --noEmit && npm run build
+cd ../careerops-pr && node test-all.mjs
 ```
 Expected: web 342 pass / 0 fail; tsc exit 0; build compiled; root 5310 pass / 0 fail.
 
@@ -119,7 +119,7 @@ PR body must include the before/after screenshots at both widths, and state that
 **Step 1: Branch fresh**
 
 ```bash
-cd /Users/codeaura/Projects/careerops-pr
+cd ../careerops-pr
 git checkout -q main && git fetch upstream --quiet
 git checkout -q -b fix/contacto-search-ceiling upstream/main
 sed -n '20,35p' modes/contacto.md
@@ -141,7 +141,7 @@ Read every hit. Step 3 ("Select primary target") and Step 4 ("Generate message")
 **Step 4: Verify the suite still passes**
 
 ```bash
-cd /Users/codeaura/Projects/careerops-pr && node test-all.mjs
+cd ../careerops-pr && node test-all.mjs
 ```
 Expected: 5310 pass / 0 fail. The suite has guards that read mode files (`tests/updater-upgrade-safety.test.mjs`, and `test-all.mjs` reads `modes/` for its coverage and personal-data checks), so a malformed edit will surface here.
 
@@ -166,10 +166,10 @@ This costs nothing and prevents the fourth item looking silently dropped.
 Once Tasks 1–3 are sent:
 
 ```bash
-cd /Users/codeaura/Projects/career-ops && git switch main && git status
+cd ../career-ops && git switch main && git status
 ```
 
-The upstream checkout at `/Users/codeaura/Projects/careerops-pr` stays where it is — it is the working reference for any review feedback on #3253 and the two new PRs. Do not delete it while PRs are open.
+The upstream checkout at `../careerops-pr` stays where it is — it is the working reference for any review feedback on #3253 and the two new PRs. Do not delete it while PRs are open.
 
 Then resume the careerforge queue, in this order:
 
