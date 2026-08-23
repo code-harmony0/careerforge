@@ -85,7 +85,7 @@ export function LogDialog({
         role="dialog"
         aria-modal="true"
         aria-label={`Log follow-up for ${entry.company}`}
-        className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-xl"
+        className="shadow-elevated-lg w-full max-w-md rounded-2xl border border-border bg-surface-2 p-5"
       >
         <div className="flex items-start justify-between gap-4">
           <div>

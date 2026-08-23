@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, X, Loader2, Settings, RotateCcw, ArrowUpRight, Sparkles } from "lucide-react";
+import { Send, X, Loader2, Settings, RotateCcw, ArrowUpRight, Sparkles, Maximize2, Minimize2 } from "lucide-react";
 import { CoMark } from "@/components/co-mark";
 import { useJobs } from "@/components/jobs/job-store";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
@@ -134,6 +134,10 @@ function msgText(m: Msg): string {
 
 export function AssistantConsole() {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef({ isDragging: false, startX: 0, startY: 0, initX: 0, initY: 0, wasDragged: false });
   const [cliId, setCliId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -141,6 +145,42 @@ export function AssistantConsole() {
   const router = useRouter();
   const pathname = usePathname();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest("button.no-drag") || (e.target as HTMLElement).closest("a")) return;
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: position.x,
+      initY: position.y,
+      wasDragged: false,
+    };
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    if (!dragRef.current.isDragging) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      dragRef.current.wasDragged = true;
+    }
+    setPosition({
+      x: dragRef.current.initX + dx,
+      y: dragRef.current.initY + dy,
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLElement>) => {
+    if (!dragRef.current.isDragging) return;
+    dragRef.current.isDragging = false;
+    setIsDragging(false);
+    const el = e.currentTarget as HTMLElement;
+    try { el.releasePointerCapture(e.pointerId); } catch {}
+  };
 
   const { jobs, startJob } = useJobs();
   const pipeline = usePipeline();
@@ -478,32 +518,55 @@ export function AssistantConsole() {
 
   return (
     <>
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex items-center justify-center gap-2 rounded-full border border-border bg-surface/90 py-1.5 pl-1.5 pr-4 shadow-lg backdrop-blur transition-colors hover:bg-surface-hover max-sm:min-h-[44px]"
-          aria-label="Open assistant"
-        >
-          <CoMark size={26} />
-          <span className="text-sm font-medium">Ask</span>
-        </button>
-      )}
-
-      {open && (
-        <div className="fixed bottom-5 right-5 z-50 flex h-[600px] max-h-[80vh] w-[400px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
-          <header className="flex items-center gap-2.5 border-b border-border px-4 py-3">
+      <div 
+        className="co-assistant-console fixed bottom-5 right-5 z-[9999] flex"
+        style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
+      >
+        {!open && (
+          <button
+            onClick={(e) => {
+              if (dragRef.current.wasDragged) return;
+              setOpen(true);
+            }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className="shadow-elevated flex items-center justify-center gap-2 rounded-full border border-border bg-surface-2/95 py-1.5 pl-1.5 pr-4 backdrop-blur transition-colors hover:bg-surface-hover max-sm:min-h-[44px] cursor-move touch-none select-none"
+            aria-label="Open assistant"
+          >
             <CoMark size={26} />
-            <div className="flex-1">
-              <div className="text-sm font-semibold tracking-tight">Assistant</div>
-              <div className="text-xs text-faint">{cliId ? `via ${cliId}` : "no CLI configured"}</div>
-            </div>
-            <Button variant="ghost" size="icon" onClick={resetChat} className="text-muted" aria-label="New chat" title="New chat">
-              <RotateCcw className="size-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="text-muted" aria-label="Close assistant">
-              <X className="size-4" />
-            </Button>
-          </header>
+            <span className="text-sm font-medium">Ask</span>
+          </button>
+        )}
+
+        {open && (
+          <div 
+            className={cn("shadow-elevated-lg flex max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface-2 transition-all", expanded ? "h-[85vh] w-[800px]" : "h-[600px] max-h-[80vh] w-[400px]")}
+            style={{ transitionDuration: isDragging ? "0ms" : "200ms" }}
+          >
+            <header 
+              className="flex items-center gap-2.5 border-b border-border px-4 py-3 cursor-move touch-none select-none"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+            >
+              <CoMark size={26} />
+              <div className="flex-1">
+                <div className="text-sm font-semibold tracking-tight">Assistant</div>
+                <div className="text-xs text-faint">{cliId ? `via ${cliId}` : "no CLI configured"}</div>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setExpanded(!expanded)} className="no-drag text-muted" aria-label="Toggle size" title={expanded ? "Shrink" : "Expand"}>
+                {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              </Button>
+              <Button variant="ghost" size="icon" onClick={resetChat} className="no-drag text-muted" aria-label="New chat" title="New chat">
+                <RotateCcw className="size-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="no-drag text-muted" aria-label="Close assistant">
+                <X className="size-4" />
+              </Button>
+            </header>
 
           <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
             {messages.map((m, i) => {
@@ -587,7 +650,8 @@ export function AssistantConsole() {
             </div>
           </div>
         </div>
-      )}
+        )}
+      </div>
     </>
   );
 }

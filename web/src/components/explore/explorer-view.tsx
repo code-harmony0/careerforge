@@ -112,8 +112,8 @@ export function ExplorerView({
   const isResults = phase === "results";
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-8 md:px-8">
-      <header className="mb-6">
+    <div className="mx-auto max-w-7xl px-5 py-8 md:px-8">
+      <header className="mb-8">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2.5">
             <Compass className="size-6 text-brand" />

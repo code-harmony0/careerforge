@@ -58,6 +58,18 @@ export function daysSince(iso: string | undefined, now: number): number | null {
   return Math.floor((now - t) / 86_400_000);
 }
 
+// A pipeline.md inbox row for a posting the CLI/web already evaluated (a tracker
+// row now exists for it) never gets its checkbox flipped to `[x]` — the web's
+// "evaluate" job (run-prompts.mjs) writes the report + tracker row but, unlike
+// the CLI `pipeline` mode, has no reason to touch pipeline.md. Left unfiltered,
+// an applied/evaluated job just sits in the inbox forever, showing as if it were
+// still untouched. Neither side carries a shared URL column to join on, so we
+// fall back to the same company+role key the tracker itself dedupes on
+// (merge-tracker.mjs) — good enough to hide a job once it's already tracked.
+export function trackerKey(company: string, role: string): string {
+  return `${company.trim().toLowerCase()}::${role.trim().toLowerCase()}`;
+}
+
 // Freshness windows mirror the Explore "posted within" segmented control so the two
 // surfaces feel like one system. A posting passes a window if its age ≤ the window.
 export const FRESHNESS_WINDOWS = [

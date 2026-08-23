@@ -8,6 +8,7 @@ import type { Application, InboxJob } from "@/lib/career-ops";
 import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/company-logo";
 import { canonStatus, scoreNum, scoreTone, statusDot } from "@/lib/format";
+import { trackerKey } from "@/lib/inbox";
 import { InboxTriage } from "@/components/inbox/inbox-triage";
 import { QuickEvaluate } from "@/components/quick-evaluate";
 import { TrainingEvaluate } from "@/components/training-evaluate";
@@ -81,16 +82,21 @@ export function PipelineView({
 
   // Pending + deduped by URL (pipeline.md can list the same posting twice) so the
   // header count, the tab count and the triage list all agree on one number.
+  // Also drop rows already tracked (evaluated/applied/…): pipeline.md's own
+  // checkbox only flips via the CLI `pipeline` mode, so a job scored or applied
+  // from the web stays "pending" there forever unless we cross-check the tracker
+  // ourselves (see trackerKey).
   const pendingInbox = useMemo(() => {
+    const tracked = new Set(applications.map((a) => trackerKey(a.company, a.role)));
     const seen = new Set<string>();
     const out: InboxJob[] = [];
     for (const j of inbox) {
-      if (j.done || seen.has(j.url)) continue;
+      if (j.done || seen.has(j.url) || tracked.has(trackerKey(j.company, j.role))) continue;
       seen.add(j.url);
       out.push(j);
     }
     return out;
-  }, [inbox]);
+  }, [inbox, applications]);
 
   const filtered = useMemo(() => {
     if (tab === "INBOX") return [];
@@ -119,7 +125,7 @@ export function PipelineView({
   }, [applications, tab, q, sort, minFilter]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 max-sm:pb-24">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 max-sm:pb-24">
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl tracking-tight text-landing">Pipeline</h1>
@@ -266,7 +272,7 @@ function InboxEmpty({ count, filtered }: { count: number; filtered: boolean }) {
     );
   }
   return (
-    <div className="dot-bg mt-4 overflow-hidden rounded-2xl border border-border bg-surface/50 bg-origin-border bg-gradient-to-tr from-brand/10 via-transparent to-transparent shadow-lg">
+    <div className="shadow-elevated dot-bg mt-4 overflow-hidden rounded-2xl border border-border bg-surface/50 bg-origin-border bg-gradient-to-tr from-brand/10 via-transparent to-transparent">
       <div className="flex items-center gap-2 border-b border-foreground/10 px-5 py-3">
         <span className="size-2.5 rounded-full bg-foreground/15" aria-hidden="true" />
         <span className="size-2.5 rounded-full bg-foreground/15" aria-hidden="true" />

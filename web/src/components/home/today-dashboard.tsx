@@ -71,7 +71,7 @@ export function TodayDashboard({
   const inboxUrls = useMemo(() => new Set(inbox.map((j) => j.url)), [inbox]);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10 max-sm:pb-24">
+    <div className="mx-auto max-w-7xl px-6 py-10 max-sm:pb-24">
       <section className="dot-bg relative overflow-hidden rounded-2xl border border-border bg-surface/40 px-7 py-10 md:px-10 md:py-12">
         <HeroGlow />
         {/* Readability scrim between the animated glow (z-0) and the copy (z-10). */}
@@ -93,7 +93,7 @@ export function TodayDashboard({
                 {newThisWeek > 0 && overdue > 0 && <span className="text-faint"> · </span>}
                 {overdue > 0 && (
                   <>
-                    <span className="text-brand tabular-nums">{overdue}</span> follow-up{overdue === 1 ? "" : "s"} due
+                    <span className="text-landing tabular-nums">{overdue}</span> follow-up{overdue === 1 ? "" : "s"} due
                   </>
                 )}
               </>
@@ -106,7 +106,7 @@ export function TodayDashboard({
             <Link href="/explore" className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-brand-foreground transition hover:bg-brand-200 max-sm:min-h-[44px]">
               Find new roles <ArrowRight className="size-4" />
             </Link>
-            <Link href="/pipeline" className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm font-medium text-foreground transition hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]">
+            <Link href="/pipeline" className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm font-medium text-foreground transition hover:border-landing/40 hover:text-landing max-sm:min-h-[44px]">
               Open pipeline
             </Link>
           </div>

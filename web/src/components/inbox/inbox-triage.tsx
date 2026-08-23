@@ -180,7 +180,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   if (inbox.length === 0) return null;
 
   return (
-    <div className={cn("mx-auto mt-4 max-w-3xl", shortlist.length > 0 && "pb-28 sm:pb-24")}>
+    <div className={cn("mt-4", shortlist.length > 0 && "pb-28 sm:pb-24")}>
       <FacetChips
         within={within}
         setWithin={setWithin}

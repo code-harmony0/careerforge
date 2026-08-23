@@ -4,6 +4,7 @@ import path from "node:path";
 import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { getSession } from "@/lib/apply/session";
+import type { ApplyField } from "@/lib/apply/extract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,7 +74,14 @@ function extractJsonObject(text: string): { obj: Record<string, unknown> | null;
 // exit code/signal, parse outcome) so a stuck/empty prefill is observable on the
 // page AND written to <root>/.career-ops-web/apply-prefill.log for debugging.
 export async function POST(req: Request) {
-  let body: { sessionId?: string; cliId?: string };
+  // Two ways in: `sessionId` (the existing Playwright-session flow — a live
+  // browser page's fields, read via getSession) or `fields`/`title` supplied
+  // directly (the browser extension's content-script reader — it already has
+  // the fields from the user's own tab, so there's no browser/session for
+  // this route to open at all; drafting was always read-only/no-browser-
+  // access here regardless, see the file header). Whichever arrives, only
+  // `.fields`/`.title` are ever used below.
+  let body: { sessionId?: string; cliId?: string; fields?: ApplyField[]; title?: string };
   try {
     body = await req.json();
   } catch {
@@ -118,8 +126,12 @@ export async function POST(req: Request) {
         /* ignore */
       }
 
-      const s = sessionId ? getSession(sessionId) : undefined;
-      if (!s) return fail("apply session not found (it may have expired)");
+      const s: { fields: ApplyField[]; title: string } | undefined = sessionId
+        ? getSession(sessionId)
+        : Array.isArray(body.fields) && body.fields.length > 0
+          ? { fields: body.fields, title: typeof body.title === "string" ? body.title : "" }
+          : undefined;
+      if (!s) return fail(sessionId ? "apply session not found (it may have expired)" : "no form fields were provided");
       const resolved = cliId ? resolveCli(cliId) : null;
       if (!resolved) return fail(`CLI '${cliId}' not found on this machine`);
       const { spec, binPath } = resolved;

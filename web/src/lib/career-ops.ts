@@ -275,6 +275,32 @@ function containedRealpath(p: string, root: string): boolean {
   }
 }
 
+/** Reverse of findReportFile: given a REPORT FILE number (the number in
+ *  reports/{n}-{slug}-{date}.md — what /api/run's "done" event returns for a
+ *  fresh evaluation), find the tracker row that links to it. Needed because
+ *  report numbers and application/row numbers are separate, diverging
+ *  counters (see findReportFile's header comment) — a caller holding only the
+ *  freshly-parsed report number (not the row it landed on) would otherwise
+ *  send that number to something expecting the row number (StatusSelect,
+ *  /api/status's --row) and hit "No tracker row with #N" the moment the two
+ *  have diverged for this application.
+ */
+export function findApplicationByReportNum(reportNum: string): Application | null {
+  const target = parseInt(reportNum, 10);
+  if (Number.isNaN(target)) return null;
+  const apps = readApplications();
+  const linked = apps.find((a) => {
+    const url = a.report.match(/\]\(([^)]+)\)/)?.[1];
+    const num = url?.match(/(\d+)-[^/]*\.md$/)?.[1];
+    return num !== undefined && parseInt(num, 10) === target;
+  });
+  if (linked) return linked;
+  // No row's link parses to this number — fall back to a row whose OWN number
+  // equals it: the common non-diverged case, and legacy/backfilled rows with
+  // no report link at all.
+  return apps.find((a) => parseInt(a.n, 10) === target) ?? null;
+}
+
 export function readReport(n: string): ReportData | null {
   const file = findReportFile(n);
   if (!file) return null;

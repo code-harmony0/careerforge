@@ -14,17 +14,25 @@ export function Card({
   className,
   corner,
   elevated,
+  raised,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
   corner?: keyof typeof CORNERS;
+  /** Theme-aware depth — a real shadow plus a lit top edge, unlike a raw
+   *  Tailwind `shadow-lg` (which is a flat black shadow, invisible on a
+   *  near-black dark background). */
   elevated?: boolean;
+  /** Sit a tier above the page surface (modals, popovers, dropdowns) —
+   *  `--surface-2` instead of `--surface`. Implies `elevated`. */
+  raised?: boolean;
 }) {
   return (
     <div
       className={cn(
         "relative overflow-hidden rounded-2xl border border-border bg-surface/50 p-5",
         corner && `${CORNERS[corner]} from-brand/10 via-transparent to-transparent bg-origin-border`,
-        elevated && "shadow-lg",
+        raised && "bg-surface-2",
+        (elevated || raised) && "shadow-elevated",
         className,
       )}
       {...props}

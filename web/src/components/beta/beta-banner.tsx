@@ -90,7 +90,7 @@ export function BetaBanner() {
 
   return (
     <>
-      <div className="fixed bottom-3 left-3 z-[70] flex items-center gap-2 rounded-full border border-brand/30 bg-surface/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur-md">
+      <div className="shadow-elevated fixed bottom-3 left-3 z-[70] flex items-center gap-2 rounded-full border border-brand/30 bg-surface-2/95 px-3 py-1.5 text-xs backdrop-blur-md">
         <span className="flex items-center gap-1.5 font-medium text-brand-text">
           <span className="size-1.5 animate-pulse rounded-full bg-brand" /> {meta.version} · {meta.channel}
         </span>
@@ -102,7 +102,7 @@ export function BetaBanner() {
 
       {open && diag && (
         <div className="fixed inset-0 z-[96] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Report a bug" onClick={() => setOpen(false)}>
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-[var(--bg)] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="shadow-elevated-lg w-full max-w-lg rounded-2xl border border-border bg-surface-2 p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center gap-2">
               <Bug className="size-4 text-brand" />
               <h2 className="text-sm font-semibold text-foreground">Report a bug · {diag.channel}</h2>

@@ -278,14 +278,27 @@ End with EXACTLY one final line: VERDICT: {0-5 how ready this plan makes the can
   // written row (verified against merge-tracker), so the robust instruction
   // costs nothing. Not "N/A" either — parseTsvExtras drops placeholders
   // precisely so they can't be misread as the row's LOCATION.
+  // modes/oferta.md's own liveness gate already covers this ("When the
+  // candidate pastes a job (text or URL)... If the candidate pasted JD text
+  // (no URL), liveness cannot be verified — note that and proceed") — this
+  // wrapper just needs to stop assuming `input` is always fetchable and hand
+  // the agent whichever of the two it actually got. `input` itself is never
+  // model-invented either way: the URL branch's `input` comes from a page the
+  // user was on, the text branch's from a paste the user typed — both pass
+  // through actions/registry.ts's evaluate handler verbatim.
+  const isUrlInput = /^https?:\/\//i.test(input.trim());
+  const postingStep = isUrlInput
+    ? `Use WebFetch to read the posting (you are headless — Playwright is unavailable, so use WebFetch and mark the report header "Verification: unconfirmed (batch mode)").`
+    : `The candidate pasted this job description as plain text — there is no URL to fetch. Per ${resolvedLang.evalModeFile}'s liveness gate, verification is not possible from text alone: note that in the report and proceed anyway (do not skip the evaluation). The pasted JD follows, verbatim:\n\n"""\n${input.trim()}\n"""`;
+
   return `You are running the OFFICIAL career-ops job evaluation, HEADLESS, on the user's own machine. Today is ${today}. Run the REAL career-ops evaluation — do NOT improvise your own scoring.
 
-1. Read ${resolvedLang.evalModeFile} — the market-appropriate evaluation mode resolved from config/profile.yml's language.modes_dir — and follow it EXACTLY (blocks A–F, G posting-legitimacy, and the Machine Summary; if this file uses different block letters/labels than the default modes/oferta.md, keep ITS labels, don't force English ones). Ground the fit in THIS person: read cv.md, config/profile.yml and modes/_profile.md. Use WebFetch to read the posting (you are headless — Playwright is unavailable, so use WebFetch and mark the report header "Verification: unconfirmed (batch mode)").
+1. Read ${resolvedLang.evalModeFile} — the market-appropriate evaluation mode resolved from config/profile.yml's language.modes_dir — and follow it EXACTLY (blocks A–F, G posting-legitimacy, and the Machine Summary; if this file uses different block letters/labels than the default modes/oferta.md, keep ITS labels, don't force English ones). Ground the fit in THIS person: read cv.md, config/profile.yml and modes/_profile.md. ${postingStep}
 
 2. Persist the result CANONICALLY so the web and the CLI share ONE source of truth:
    a. Reserve a report number: run \`node reserve-report-num.mjs\` — its stdout is a 3-digit number (e.g. 035).
    b. Write the full report to reports/{num}-{company-slug}-${today}.md  (company-slug = company lowercased, non-alphanumerics → hyphens).
-   c. Append ONE row of 10 TAB-separated columns to batch/tracker-additions/{num}-{company-slug}.tsv, in THIS exact order (real \\t tabs, status BEFORE score). ALWAYS write all 10 fields — leave the last one EMPTY if there is no posting URL, never "N/A" or "-":
+   c. Append ONE row of 10 TAB-separated columns to batch/tracker-additions/{num}-{company-slug}.tsv, in THIS exact order (real \\t tabs, status BEFORE score). ALWAYS write all 10 fields — leave the last one EMPTY if there is no posting URL (including when the JD was pasted as text), never "N/A" or "-":
       {num}\t${today}\t{Company}\t{Role}\t{CanonicalStatus e.g. Evaluated}\t{score}/5\t❌\t[{num}](reports/{num}-{company-slug}-${today}.md)\t{one-line note}${postedSegment}\t{posting URL, or empty}
    d. Merge into the tracker: run \`node merge-tracker.mjs\` (it dedupes by company+role+report-num, validates the status, and writes data/applications.md — NEVER edit applications.md by hand).
 

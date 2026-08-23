@@ -93,7 +93,7 @@ function MultiSelectDropdown({
         ))}
       </div>
       {open && (
-        <div role="listbox" aria-multiselectable="true" className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-md border border-border bg-surface shadow-lg">
+        <div role="listbox" aria-multiselectable="true" className="shadow-elevated absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-md border border-border bg-surface-2">
           <div className="p-2 border-b border-border sticky top-0 bg-surface z-20">
              <input
                type="text"

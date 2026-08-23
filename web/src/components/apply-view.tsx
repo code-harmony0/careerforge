@@ -166,7 +166,7 @@ export function ApplyView() {
 
           {/* the questions — float on the blurred form image, cascade in, each
               flashes brand-orange the instant its drafted answer lands */}
-          <div className="space-y-1 rounded-2xl border border-border/70 bg-surface/80 p-2 shadow-2xl shadow-black/10 backdrop-blur-md sm:p-3">
+          <div className="shadow-elevated-lg space-y-1 rounded-2xl border border-border/70 bg-surface-2/80 p-2 backdrop-blur-md sm:p-3">
             {a.fields.map((f, i) => (
               <div key={f.id} className="co-rise rounded-xl px-3 py-2.5" style={{ animationDelay: `${Math.min(i * 45, 700)}ms` }}>
                 <FieldRow

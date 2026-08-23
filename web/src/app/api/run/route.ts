@@ -8,7 +8,7 @@ import path from "node:path";
 import { resolveCli } from "@/lib/clis";
 import { accumulateTokens, newCompletedReportName, isFatalGenericStderr } from "@/lib/run-cli-support.mjs";
 import { spawnHeadlessCli } from "@/lib/spawn-cli.mjs";
-import { careerOpsRoot, readMemory, findReportFile, readInbox, readScanDates, readLanguageConfig } from "@/lib/career-ops";
+import { careerOpsRoot, readMemory, findReportFile, findApplicationByReportNum, readInbox, readScanDates, readLanguageConfig } from "@/lib/career-ops";
 import { resolvePdfPaths, type PdfPaths } from "@/lib/pdf-paths.mjs";
 import { renderAndMarkPdf, writeCvHtml, pdfRunOutcome } from "@/lib/pdf-render.mjs";
 import { createCvEnvelopeFilter, type CvEnvelope } from "@/lib/cv-envelope.mjs";
@@ -432,7 +432,13 @@ export async function POST(req: Request) {
           // instead of recording a confident score off a half-finished run.
           send({ type: "error", msg: "This run hit an error before finishing, so it isn't recorded as a confident result — re-run it to verify." });
         } else {
-          send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportNum });
+          // appN (the tracker ROW number) is deliberately separate from
+          // reportNum (the REPORT FILE number) — see findApplicationByReportNum's
+          // header. Resolved here, server-side, right after merge-tracker.mjs
+          // ran, so a client never has to guess which number space something
+          // downstream (StatusSelect, /api/status) actually wants.
+          const appN = reportNum ? findApplicationByReportNum(reportNum)?.n : undefined;
+          send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportNum, appN });
         }
         close();
       });

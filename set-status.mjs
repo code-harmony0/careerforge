@@ -579,7 +579,14 @@ const result = {
 };
 
 if (flags.json) {
-  console.log(JSON.stringify(result, null, 2));
+  // Compact, single line — NOT pretty-printed. web/src/lib/status-cli.mjs's
+  // parseCliJson reads stdout from the end looking for the last line that
+  // parses as a whole JSON object (so a preceding diagnostic line can't be
+  // mistaken for the result); a pretty-printed object spans many lines, none
+  // of which parses alone, so /api/status silently got "no result" back for
+  // EVERY successful write. Match line 238's usage-error output, which was
+  // already compact.
+  console.log(JSON.stringify(result));
 } else {
   const verb = flags.dryRun ? 'would set' : changed ? 'set' : 'already';
   console.log(`✅ #${target.num} ${target.company} — ${target.role}: ${verb} ${oldStatus} → ${newStatus}${note ? ` (note: ${note})` : ''}`);

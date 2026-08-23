@@ -82,7 +82,7 @@ export function OutcomeButton({ n }: { n: string }) {
         // Anchored left (not right, like ApplyButton) — this button sits mid-row,
         // not at the content edge, so a right-anchored w-72 popover extending
         // leftward can slide under the fixed sidebar on narrower viewports.
-        <div className="absolute left-0 top-full z-[100] mt-2 w-72 origin-top-left rounded-xl border border-border bg-surface p-3 shadow-xl">
+        <div className="shadow-elevated absolute left-0 top-full z-[100] mt-2 w-72 origin-top-left rounded-xl border border-border bg-surface-2 p-3">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">What happened?</h4>
           <form onSubmit={record} className="flex flex-col gap-2.5">
             <select

@@ -11,7 +11,7 @@ Export a tailored, ATS-optimized CV as a `.tex` file and compile it to PDF via `
 5. Detect JD language → CV language (EN default)
 6. Detect role archetype → adapt framing
 7. Rewrite Professional Summary injecting JD keywords (same rules as `pdf` mode — NEVER invent skills)
-8. Select top 3-4 most relevant projects for the offer, and populate `awards[]` from `cv.md`'s Awards / Honors section when it has entries that support the role (omit the key otherwise — the section is dropped, header included; never invent an award)
+8. Select top 3-4 most relevant projects for the offer. **First, drop the duplicates** (same rule as `pdf` mode): if a Projects entry describes the same underlying deliverable as an Experience bullet, don't render both — fold the Project's missing detail (metric, link, scope note) into the Experience bullet and only pull in genuinely separate projects. Populate `awards[]` from `cv.md`'s Awards / Honors section when it has entries that support the role (omit the key otherwise — the section is dropped, header included; never invent an award)
 9. Reorder experience bullets by JD relevance
 10. Inject keywords naturally into existing achievements
 11. Build a JSON payload (see schema below) and write to `/tmp/cv-{candidate}-{company}.json`
@@ -138,7 +138,7 @@ Write a JSON file with this structure. `build-cv-latex.mjs` handles template mer
 - Standard section headers: Education, Work Experience, Personal Projects, Awards & Honors, Technical Skills
 - Optional sections (Personal Projects, Education, Awards & Honors) are dropped entirely — header included — when their array is empty or absent
 - UTF-8, machine-readable via `\pdfgentounicode=1`
-- Keywords distributed: first bullet of each role, skills section
+- Keywords distributed: first bullet of the 1-2 most JD-relevant roles, skills section — don't force current-JD vocabulary into an older/junior role's bullet just to hit this rule (same scoping as `pdf` mode)
 - No images, no graphics, no color in body text
 
 ## Keyword Injection Strategy

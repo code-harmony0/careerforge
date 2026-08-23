@@ -105,7 +105,7 @@ export function AiActionsMenu({ n, company }: { n: string; company: string }) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-[100] mt-2 w-80 origin-top-left overflow-hidden rounded-xl border border-border bg-surface shadow-xl">
+        <div className="shadow-elevated absolute left-0 top-full z-[100] mt-2 w-80 origin-top-left overflow-hidden rounded-xl border border-border bg-surface-2">
           <div className="flex items-center justify-between border-b border-border px-3.5 py-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">AI actions</span>
             <span className="text-[11px] text-faint">runs on your own AI — uses tokens</span>

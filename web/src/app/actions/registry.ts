@@ -143,14 +143,31 @@ const ACTIONS: Record<string, ActionDef> = {
     sideEffect: "spend",
     run: (raw, ctx) => {
       const url = raw.url;
-      if (!isStr(url) || !/^https?:\/\//i.test(url)) return { status: "ignored", note: "invalid url" };
-      const ex = ctx.jobForUrl(url);
-      if (ex && ex.status !== "error" && !raw.rerun) return { status: "ignored", note: "already evaluated" };
+      if (isStr(url)) {
+        if (!/^https?:\/\//i.test(url)) return { status: "ignored", note: "invalid url" };
+        const ex = ctx.jobForUrl(url);
+        if (ex && ex.status !== "error" && !raw.rerun) return { status: "ignored", note: "already evaluated" };
+        const id = ctx.startJob({
+          title: isStr(raw.title) ? String(raw.title) : "Evaluate",
+          subtitle: isStr(raw.subtitle) ? String(raw.subtitle) : undefined,
+          kind: "evaluate",
+          input: url,
+          page: "/pipeline",
+        });
+        return { status: "done", jobIds: id ? [id] : [] };
+      }
+      // No URL: the user pasted the JD as plain text instead of a link.
+      // run-prompts.mjs's evaluate branch already handles this (it's what
+      // modes/oferta.md's own liveness gate calls "pasted job text") — it just
+      // needed a caller willing to pass non-URL `input` through. No dedup key
+      // exists for text (no jobForUrl equivalent), so every paste runs fresh.
+      const text = raw.text;
+      if (!isStr(text) || text.trim().length < 40) return { status: "ignored", note: "missing url or JD text" };
       const id = ctx.startJob({
         title: isStr(raw.title) ? String(raw.title) : "Evaluate",
-        subtitle: isStr(raw.subtitle) ? String(raw.subtitle) : undefined,
+        subtitle: isStr(raw.subtitle) ? String(raw.subtitle) : "pasted JD",
         kind: "evaluate",
-        input: url,
+        input: text.trim().slice(0, 20_000),
         page: "/pipeline",
       });
       return { status: "done", jobIds: id ? [id] : [] };

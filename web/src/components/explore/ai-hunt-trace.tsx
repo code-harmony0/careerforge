@@ -56,7 +56,7 @@ export function AiHuntTrace({ trace }: { trace: AiTraceChunk[] }) {
   if (sentences.length === 0) return null;
 
   return (
-    <div className="w-full max-w-2xl rounded-2xl border border-border/70 bg-surface/80 text-left shadow-xl shadow-black/10 backdrop-blur-md">
+    <div className="shadow-elevated-lg w-full max-w-2xl rounded-2xl border border-border/70 bg-surface-2/80 text-left backdrop-blur-md">
       <style>{STYLE}</style>
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
         <span className="co-reason__dot" />
