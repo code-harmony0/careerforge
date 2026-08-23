@@ -1,6 +1,7 @@
 import { spawnHeadlessCli } from "@/lib/spawn-cli.mjs";
 import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory, doctorState } from "@/lib/career-ops";
+import { saveChatImage, deleteChatImage } from "@/lib/chat-attachment.mjs";
 
 export const runtime = "nodejs"; // child_process (spawn) requires the Node runtime
 export const dynamic = "force-dynamic";
@@ -19,7 +20,8 @@ The args are a single JSON object. The dashboard parses the envelope and perform
 ACTIONS:
 - navigate {"path":"/pipeline?tab=OFFER&min=4"} — take the user to a section. Valid paths: /, /pipeline, /portals, /analytics, /cv, /config, /apply, /pipeline/{n} (a report), /jobs/{id} (a worker). The path may carry a query string.
 - filterPipeline {"tab":"OFFER","min":4,"q":"text","sort":"score","dir":-1} — filter the pipeline table in place. tab ∈ INBOX, ALL, EVALUATED, APPLIED, RESPONDED, INTERVIEW, OFFER, HIRED, REJECTED, DISCARDED, SKIP; min = score floor 0–5.
-- evaluate {"url":"https://…","title":"Evaluate · Acme","subtitle":"Role"} — spin ONE read-only evaluation worker on a SPECIFIC posting URL. Only when you actually have a real URL (e.g. from the page the user is on).
+- evaluate {"url":"https://…","title":"Evaluate · Acme","subtitle":"Role"} — spin ONE read-only evaluation worker on a SPECIFIC posting URL. Use this when you have a real URL (e.g. from the page the user is on). NEVER invent a URL.
+- evaluate {"text":"<the full JD, verbatim>","title":"Evaluate · Acme","subtitle":"Role"} — same worker, for when the user pasted the job description as plain text instead of a link. "text" MUST be their pasted JD copied verbatim from the conversation — never your own summary or reconstruction of it. This is the action to take BEFORE offering to tailor a CV, draft a cover letter, or fill a form for a posting that has no URL and isn't tracked yet: those all need a report number (#n) that only a real evaluation produces. Don't write CV content or cover-letter prose yourself as a substitute — run this instead, then generatePdf/cover once it's done.
 - evaluateCompany {"company":"Anthropic"} — evaluate ALL of the user's PENDING inbox postings for that company. Emit the COMPANY NAME ONLY — never URLs; the app resolves the concrete postings itself. Big batches ask the user to confirm first.
 - research {"target":"https://… or 'my portfolio'","title":"Research · X"} — spin a read-only research worker.
 - generatePdf {"n":"42"} — generate an ATS-optimized CV tailored to application #42 (runs the real pdf mode → output/ + marks the tracker PDF column). Spends tokens.
@@ -45,7 +47,7 @@ Keep replies short, warm, and useful. Don't dump raw files or narrate internal d
 type Msg = { role: "user" | "assistant"; content: string };
 
 export async function POST(req: Request) {
-  let body: { message?: string; cliId?: string; history?: Msg[]; pageContext?: string };
+  let body: { message?: string; cliId?: string; history?: Msg[]; pageContext?: string; image?: string };
   try {
     body = await req.json();
   } catch {
@@ -65,6 +67,30 @@ export async function POST(req: Request) {
   }
   const { spec, binPath } = resolved;
 
+  // Image support rides on Claude Code's Read tool, which is multimodal for
+  // image files — there's no separate "vision API" to call, just a file path
+  // to hand the agent (already in allowedTools below). Other CLIs don't get
+  // this guaranteed, so the attempt is scoped to Claude.
+  //
+  // A failed save (too large, unrecognized format) or a non-Claude CLI used
+  // to drop the image with NO signal anywhere — the chat would just proceed
+  // as if nothing was attached, and the model (correctly, from its position)
+  // would report seeing no image, leaving the user staring at a picture they
+  // clearly sent with no idea why it never arrived. imageWarning surfaces
+  // that reason as the first thing the user sees instead.
+  const isClaude = cliId === "claude";
+  let imagePath: string | undefined;
+  let imageWarning: string | undefined;
+  if (body.image) {
+    if (!isClaude) {
+      imageWarning = `_(Image attachments need Claude Code — ${spec.name} can't read them, so this one was skipped.)_\n\n`;
+    } else {
+      const saved = saveChatImage({ root: careerOpsRoot(), dataUrl: body.image });
+      if (saved.ok) imagePath = saved.path;
+      else imageWarning = `_(Couldn't attach your image: ${saved.error}.)_\n\n`;
+    }
+  }
+
   const history = (body.history ?? []).slice(-8);
   const convo = history.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n");
   const pageLine = pageContext
@@ -82,14 +108,16 @@ export async function POST(req: Request) {
   const setupLine = onboardingNeeded
     ? `\n\nSETUP STATE (authoritative — the SAME signal the home screen uses; trust it over guessing, and do NOT re-ask for anything already on file):\n- CV on file (cv.md): ${hasCv ? "YES — do NOT ask for it again; read it to be concrete" : "NO — this is the first thing to collect"}\n- Still missing: ${missing.length ? missing.join(", ") : "nothing"}\nWhen onboarding, START at the first item actually missing. If the CV is already on file, SKIP step 1 entirely and go straight to the next missing prerequisite (usually the profile — target roles, comp, location).`
     : `\n\nSETUP STATE: this user is fully set up (CV + profile + scanner all on file). Do NOT run onboarding or ask for a CV — just help them with what they actually asked.`;
-  const prompt = `${SYSTEM_PREAMBLE}${setupLine}${memoryLine}${pageLine}\n\n--- Conversation ---\n${convo}\nUser: ${message}\nAssistant:`;
+  const imageLine = imagePath
+    ? `\n\nThe user attached an image with this message. Read it FIRST with the Read tool at this exact path before responding: ${imagePath}`
+    : "";
+  const prompt = `${SYSTEM_PREAMBLE}${setupLine}${memoryLine}${pageLine}${imageLine}\n\n--- Conversation ---\n${convo}\nUser: ${message}\nAssistant:`;
 
   // Claude Code streams token-level deltas via stream-json + partial messages.
   // Other CLIs: pass their stdout through raw.
   // The chat CLI is READ-ONLY: all writes go through gated registry actions
   // (remember → /api/memory, setStatus → /api/status), never the CLI editing
   // files directly. Scope its tools so it can advise (read) but not blind-write.
-  const isClaude = cliId === "claude";
   // allowedTools must be COMMA-separated; disallowedTools is the hard guardrail
   // so the advisor can read (and WebFetch) but never blind-writes or shells out.
   const args = isClaude
@@ -132,6 +160,7 @@ export async function POST(req: Request) {
         if (!closed) {
           closed = true;
           if (killer) clearTimeout(killer);
+          if (imagePath) deleteChatImage(imagePath); // scratch file, done once the agent has read it
           try {
             controller.close();
           } catch {
@@ -152,6 +181,8 @@ export async function POST(req: Request) {
       const emit = (s: string) => {
         if (safeEnqueue(s)) emitted = true;
       };
+
+      if (imageWarning) emit(imageWarning);
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
@@ -197,6 +228,7 @@ export async function POST(req: Request) {
     cancel() {
       closed = true;
       if (killer) clearTimeout(killer);
+      if (imagePath) deleteChatImage(imagePath);
       try {
         child.kill("SIGTERM");
       } catch {
