@@ -1,0 +1,430 @@
+# React question pack
+
+**Source:** [sudheerj/reactjs-interview-questions](https://github.com/sudheerj/reactjs-interview-questions)
+**Licence:** MIT — Copyright (c) 2017-Present Sudheer Jonna
+**Extracted:** 2026-08-24, from the repository's own table of contents.
+
+Redistributed under the MIT licence, which permits it. The copyright line above
+is the attribution that licence requires; do not remove it.
+
+This pack spans junior through senior. That is deliberate — the bank tracks
+status per question, so the trivial ones go green on first pass and stop
+appearing in the due queue, while the ones that catch you stay red. Seeding it
+is opt-in: `node question-bank.mjs seed --stack react`.
+
+- What is React?
+- What is the history behind React's evolution?
+- What are the major features of React?
+- What is JSX?
+- What is the difference between an Element and a Component?
+- How do you create components in React?
+- When should you use a Class Component over a Function Component?
+- What are Pure Components?
+- What is state in React?
+- What are props in React?
+- What is the difference between state and props?
+- What is the difference between HTML and React event handling?
+- What are synthetic events in React?
+- What are inline conditional expressions?
+- What is the "key" prop and what is its benefit when used in arrays of elements?
+- What is the Virtual DOM?
+- How does the Virtual DOM work?
+- What is the difference between Shadow DOM and Virtual DOM?
+- What is React Fiber?
+- What is the main goal of React Fiber?
+- What are controlled components?
+- What are uncontrolled components?
+- What is the difference between createElement and cloneElement?
+- What is Lifting State Up in React?
+- What are Higher-Order Components?
+- What is the children prop?
+- How do you write comments in React?
+- What is reconciliation?
+- Does the lazy function support named exports?
+- Why does React use className instead of the class attribute?
+- What are Fragments?
+- Why are Fragments better than container divs?
+- What are portals in React?
+- What are stateless components?
+- What are stateful components?
+- How do you apply validation to props in React?
+- What are the advantages of React?
+- What are the limitations of React?
+- What are the recommended ways for static type checking?
+- What is the use of the react-dom package?
+- What is ReactDOMServer?
+- How do you use innerHTML in React?
+- How do you apply styles in React?
+- How are events different in React?
+- What is the impact of using indexes as keys?
+- How do you conditionally render components?
+- Why do we need to be careful when spreading props on DOM elements?
+- How do you memoize a component?
+- How do you implement Server-Side Rendering (SSR)?
+- How do you enable production mode in React?
+- Do Hooks replace render props and higher-order components?
+- What is a switching component?
+- What are the pointer events supported in React?
+- Why should component names start with a capital letter?
+- Are custom DOM attributes supported in React v16?
+- How do you loop inside JSX?
+- How do you access props within attribute quotes?
+- What is a React PropType array with shape?
+- How do you conditionally apply class attributes?
+- What is the difference between React and ReactDOM?
+- Why is ReactDOM separated from React?
+- How do you use the React label element?
+- How do you combine multiple inline style objects?
+- How do you re-render the view when the browser is resized?
+- How do you pretty-print JSON with React?
+- Why can't you update props in React?
+- How do you focus an input element on page load?
+- How can you find the version of React at runtime in the browser?
+- How do you add Google Analytics for React Router?
+- How do you apply vendor prefixes to inline styles in React?
+- How do you import and export components using React and ES6?
+- What are the exceptions to React component naming?
+- Is it possible to use async/await in plain React?
+- What are common folder structures for React?
+- What are popular packages for animation?
+- What are the benefits of style modules?
+- What are popular React-specific linters?
+- What is React Router?
+- How is React Router different from the history library?
+- What are the <Router> components of React Router v6?
+- What is the purpose of the push and replace methods of history?
+- How do you programmatically navigate using React Router v4?
+- How do you get query parameters in React Router v4?
+- Why do you get a "Router may have only one child element" warning?
+- How do you pass params to the history.push method in React Router v4?
+- How do you implement a default or NotFound page?
+- How do you get history in React Router v4?
+- How do you perform an automatic redirect after login?
+- What is React Intl?
+- What are the main features of React Intl?
+- What are the two ways of formatting in React Intl?
+- How do you use FormattedMessage as a placeholder with React Intl?
+- How do you access the current locale with React Intl?
+- How do you format a date using React Intl?
+- What is the Shallow Renderer in React testing?
+- What is the TestRenderer package in React?
+- What is the purpose of the ReactTestUtils package?
+- What is Jest?
+- What are the advantages of Jest over Jasmine?
+- Can you give a simple example of a Jest test case?
+- What is Flux?
+- What is Redux?
+- What are the core principles of Redux?
+- What are the downsides of Redux compared to Flux?
+- What is the difference between mapStateToProps() and mapDispatchToProps()?
+- Can you dispatch an action in a reducer?
+- How do you access the Redux store outside a component?
+- What are the drawbacks of the MVW pattern?
+- Are there any similarities between Redux and RxJS?
+- How do you reset state in Redux?
+- What is the difference between React Context and React Redux?
+- Why are Redux state functions called reducers?
+- How do you make an AJAX request in Redux?
+- Should you keep all component states in the Redux store?
+- What is the proper way to access the Redux store?
+- What is the difference between a component and a container in React Redux?
+- What is the purpose of constants in Redux?
+- What are the different ways to write mapDispatchToProps()?
+- What is the use of the ownProps parameter in mapStateToProps() and mapDispatchToProps()?
+- How do you structure Redux top-level directories?
+- What is Redux Saga?
+- What is the mental model of Redux Saga?
+- What are the differences between call and put in Redux Saga?
+- What is Redux Thunk?
+- What are the differences between Redux Saga and Redux Thunk?
+- What is Redux DevTools?
+- What are the features of Redux DevTools?
+- What are Redux selectors and why should you use them?
+- What is Redux Form?
+- What are the main features of Redux Form?
+- How do you add multiple middlewares to Redux?
+- How do you set the initial state in Redux?
+- How is Relay different from Redux?
+- What is an action in Redux?
+- What is the difference between React Native and React?
+- How do you test React Native apps?
+- How do you log in React Native?
+- How do you debug React Native apps?
+- What is Reselect and how does it work?
+- What is Flow?
+- What is the difference between Flow and PropTypes?
+- How do you use Font Awesome icons in React?
+- What is React DevTools?
+- Why does DevTools not load in Chrome for local files?
+- How do you use Polymer in React?
+- What are the advantages of React over Vue.js?
+- What is the difference between React and Angular?
+- Why is the React tab not showing up in DevTools?
+- What are styled-components?
+- Can you give an example of styled-components?
+- What is Relay?
+- What are the main features of the Reselect library?
+- Can you give an example of Reselect usage?
+- Can Redux only be used with React?
+- Do you need a specific build tool to use Redux?
+- How do Redux Form initial values get updated from state?
+- How do React PropTypes allow different types for one prop?
+- Can you import an SVG file as a React component?
+- What is render hijacking in React?
+- How do you pass numbers to a React component?
+- Do you need to keep all state in Redux? Should you ever use React's internal state?
+- What is the purpose of registerServiceWorker in React?
+- What is the React.memo function?
+- What is the React.lazy function?
+- How do you prevent unnecessary updates using setState?
+- How do you render arrays, strings, and numbers in React v16?
+- What are Hooks?
+- What rules must be followed for Hooks?
+- How do you ensure Hooks follow the rules in your project?
+- What are the differences between Flux and Redux?
+- What are the benefits of React Router v4?
+- Can you describe the componentDidCatch lifecycle method signature?
+- In which scenarios do error boundaries not catch errors?
+- What is the behavior of uncaught errors in React v16?
+- What is the proper placement for error boundaries?
+- What is the benefit of a component stack trace from an error boundary?
+- What are default props?
+- What is the purpose of the displayName class property?
+- What is the browser support for React applications?
+- What is code-splitting?
+- What are keyed Fragments?
+- Does React support all HTML attributes?
+- When do component props default to true?
+- What is Next.js and what are its major features?
+- How do you pass an event handler to a component?
+- How do you prevent a function from being called multiple times?
+- How does JSX prevent injection attacks?
+- How do you update rendered elements?
+- How do you indicate that props are read-only?
+- What are the conditions for safely using an index as a key?
+- Do keys need to be globally unique?
+- What is the popular choice for form handling?
+- What are the advantages of Formik over the Redux Form library?
+- Why are you not required to use inheritance?
+- Can you use web components in a React application?
+- What is a dynamic import?
+- What are loadable components?
+- What is a Suspense component?
+- What is route-based code splitting?
+- What is the purpose of the default value in Context?
+- What is the diffing algorithm?
+- What rules are covered by the diffing algorithm?
+- When do you need to use refs?
+- Must a prop be named "render" for render props?
+- What are the problems with using render props with Pure Components?
+- What is the windowing technique?
+- How do you print falsy values in JSX?
+- What is the typical use case for portals?
+- How do you set a default value for an uncontrolled component?
+- What is your favorite React stack?
+- What is the difference between the real DOM and the Virtual DOM?
+- How do you add Bootstrap to a React application?
+- Can you list the top websites or applications using React as a front-end framework?
+- Is it recommended to use the CSS-in-JS technique in React?
+- Do you need to rewrite all class components with Hooks?
+- How do you fetch data with React Hooks?
+- Do Hooks cover all use cases for classes?
+- What is the stable release for Hooks support?
+- Why do we use array destructuring (square bracket notation) in useState?
+- What sources were used for introducing Hooks?
+- How do you access the imperative API of web components?
+- What is Formik?
+- What are typical middleware choices for handling asynchronous calls in Redux?
+- Do browsers understand JSX code?
+- Can you describe data flow in React?
+- What is MobX?
+- What are the differences between Redux and MobX?
+- Should you learn ES6 before learning ReactJS?
+- What is concurrent rendering?
+- What is the difference between async mode and concurrent mode?
+- What is the purpose of the ESLint plugin for Hooks?
+- What is the difference between imperative and declarative programming in React?
+- What are the benefits of using TypeScript with ReactJS?
+- How do you ensure a user remains authenticated on page refresh while using Context API state management?
+- What are the benefits of the new JSX transform?
+- How is the new JSX transform different from the old transform?
+- What are React Server Components?
+- What is prop drilling?
+- What is the difference between the useState and useRef Hooks?
+- What is a wrapper component?
+- What are the differences between the useEffect and useLayoutEffect Hooks?
+- What are the differences between functional and class components?
+- What is Strict Mode in React?
+- What is the benefit of Strict Mode?
+- Why does Strict Mode render twice in React?
+- What are the rules of JSX?
+- What is the reason multiple JSX tags must be wrapped?
+- How do you prevent mutating array variables?
+- What are capture phase events?
+- How does React update the screen in an application?
+- How does React batch multiple state updates?
+- Is it possible to prevent automatic batching?
+- What is React hydration?
+- How do you update objects inside state?
+- How do you update nested objects inside state?
+- How do you update arrays inside state?
+- How do you use the Immer library for state updates?
+- What are the benefits of preventing direct state mutations?
+- What are the preferred and non-preferred array operations for updating state?
+- What will happen when defining nested function components?
+- Can I use keys for non-list items?
+- What are the guidelines to follow for writing reducers?
+- What is useReducer hook? Can you describe its usage?
+- How do you compare useState and useReducer?
+- How does Context work with the useContext hook?
+- What are the use cases of the useContext hook?
+- When should you use client and server components?
+- What are the differences between the Page Router and App Router in Next.js?
+- Can you describe the useMemo() Hook?
+- Can Hooks be used in class components?
+- What is an updater function? Should an updater function be used in all cases?
+- Can useState take a function as an initial value?
+- What types of values can useState hold?
+- What happens if you call useState conditionally?
+- Is useState Synchronous or Asynchronous?
+- Can you explain how useState works internally?
+- What is useReducer? Why do you use useReducer?
+- How does useReducer work? Explain with an example
+- Can you combine useReducer with useContext?
+- Can you dispatch multiple actions in a row with useReducer?
+- Is dispatch from useReducer asynchronous and does it update state immediately?
+- How does useContext work? Explain with an example
+- Can you use multiple Contexts in one component?
+- What's a common pitfall when using useContext with objects?
+- What would the context value be for no matching provider?
+- How do reactive dependencies in the useEffect dependency array affect its execution behavior?
+- When and how often does React invoke the setup and cleanup functions inside a useEffect hook?
+- What happens if you return a Promise from useEffect?
+- Can you have multiple useEffect hooks in a single component?
+- How to prevent infinite loops with useEffect?
+- What are the use cases of useLayoutEffect?
+- How does useLayoutEffect work during server-side rendering (SSR)?
+- What happens if you use useLayoutEffect for non-layout logic?
+- How does useLayoutEffect cause layout thrashing?
+- How do you use useRef to access a DOM element in React? Give an example
+- Can you use useRef to persist values across renders?
+- Can useRef be used to store previous values?
+- Is it possible to access a ref in the render method?
+- What are the common use cases of useRef hook?
+- What is useImperativeHandle Hook? Give an example
+- When should you use useImperativeHandle?
+- Is it possible to use useImperativeHandle without forwardRef?
+- How is useMemo different from useCallback?
+- Does useMemo prevent re-rendering of child components?
+- What is useCallback and why is it used?
+- What are Custom React Hooks, and how can you develop one?
+- How does React Fiber work? Explain in detail
+- What is the useId hook and when should you use it?
+- What is the useDeferredValue hook?
+- What is the useTransition hook and how does it differ from useDeferredValue?
+- What is the useSyncExternalStore hook?
+- What is the useInsertionEffect hook?
+- How do you share state logic between components using custom hooks?
+- What is the useDebugValue hook?
+- How do you handle cleanup in useEffect?
+- What are the differences between useEffect and useEvent (experimental)?
+- What are the best practices for using React Hooks?
+- What are the key features introduced in React 18?
+- What are the key features introduced in React 19?
+- What is the use() hook in React 19?
+- What are Server Actions in React 19?
+- What are useFormState and useFormStatus hooks?
+- What is the useOptimistic hook?
+- What is the React Compiler (React Forget)?
+- What is Streaming SSR and how does React 18+ improve it?
+- Why should we not update the state directly?
+- What is the purpose of callback function as an argument of setState()?
+- How to bind methods or event handlers in JSX callbacks?
+- How to pass a parameter to an event handler or callback?
+- What is the use of refs?
+- How to create refs?
+- What are forward refs?
+- Which is preferred option with in callback refs and findDOMNode()?
+- Why are String Refs legacy?
+- What are the different phases of component lifecycle?
+- What are the lifecycle methods of React?
+- How to create props proxy for HOC component?
+- What is context?
+- What is the purpose of using super constructor with props argument?
+- How to set state with a dynamic key name?
+- What would be the common mistake of function being called every time the component renders?
+- What are error boundaries in React v16
+- How are error boundaries handled in React v15?
+- What is the purpose of render method of react-dom?
+- What will happen if you use setState in constructor?
+- Is it good to use setState() in componentWillMount() method?
+- What will happen if you use props in initial state?
+- How you use decorators in React?
+- What is CRA and its benefits?
+- What is the lifecycle methods order in mounting?
+- What are the lifecycle methods going to be deprecated in React v16?
+- What is the purpose of getDerivedStateFromProps() lifecycle method?
+- What is the purpose of getSnapshotBeforeUpdate() lifecycle method?
+- What is the recommended way for naming components?
+- What is the recommended ordering of methods in component class?
+- Why we need to pass a function to setState()?
+- Why is isMounted() an anti-pattern and what is the proper solution?
+- What is the difference between constructor and getInitialState?
+- Can you force a component to re-render without calling setState?
+- What is the difference between super() and super(props) in React using ES6 classes?
+- What is the difference between setState and replaceState methods?
+- How to listen to state changes?
+- What is the recommended approach of removing an array element in react state?
+- Is it possible to use React without rendering HTML?
+- What are the possible ways of updating objects in state?
+- What are the approaches to include polyfills in your create-react-app?
+- How to use https instead of http in create-react-app?
+- How to avoid using relative path imports in create-react-app?
+- How to update a component every second?
+- Why is a component constructor called only once?
+- How to define constants in React?
+- How to programmatically trigger click event in React?
+- How to make AJAX call and In which component lifecycle methods should I make an AJAX call?
+- What are render props?
+- How to dispatch an action on load?
+- How to use connect from React Redux?
+- Whats the purpose of at symbol in the redux connect decorator?
+- How to use TypeScript in create-react-app application?
+- Does the statics object work with ES6 classes in React?
+- Why are inline ref callbacks or functions not recommended?
+- What are HOC factory implementations?
+- How to use class field declarations syntax in React classes?
+- Why do you not need error boundaries for event handlers?
+- What is the difference between try catch block and error boundaries?
+- What is the required method to be defined for a class component?
+- What are the possible return types of render method?
+- What is the main purpose of constructor?
+- Is it mandatory to define constructor for React component?
+- Why should not call setState in componentWillUnmount?
+- What is the purpose of getDerivedStateFromError?
+- What is the methods order when component re-rendered?
+- What are the methods invoked during error handling?
+- What is the purpose of unmountComponentAtNode method?
+- What are the limitations with HOCs?
+- How to debug forwardRefs in DevTools?
+- Is it good to use arrow functions in render methods?
+- How do you say that state updates are merged?
+- How do you pass arguments to an event handler?
+- How to prevent component from rendering?
+- Give an example on How to use context?
+- How do you use contextType?
+- What is a consumer?
+- How do you solve performance corner cases while using context?
+- What is the purpose of forward ref in HOCs?
+- Is it ref argument available for all functions or class components?
+- Why do you need additional care for component libraries while using forward refs?
+- How to create react class components without ES6?
+- Is it possible to use react without JSX?
+- How do you create HOC using render props?
+- What is react scripts?
+- What are the features of create react app?
+- What is the purpose of renderToNodeStream method?
+- How do you get redux scaffolding using create-react-app?
+- What is state mutation and how to prevent it?
+- What are React Mixins?
+- Can I use javascript urls in react16.9?
