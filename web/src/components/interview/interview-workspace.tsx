@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { cn } from "@/lib/cn";
 import { InterviewForm } from "@/components/interview/interview-form";
 import { PrepLibrary } from "@/components/interview/prep-library";
+import { QuestionBankView } from "@/components/interview/question-bank-view";
 
 // Two panes, one destination: generate new prep, or reopen prep already on disk.
 //
@@ -11,11 +12,12 @@ import { PrepLibrary } from "@/components/interview/prep-library";
 // live job state (a running worker, its streamed output, the unsaved result),
 // and a route change would throw that away mid-run.
 
-type Pane = "prepare" | "saved";
+type Pane = "prepare" | "saved" | "questions";
 
 const PANES: { id: Pane; label: string; hint: string }[] = [
   { id: "prepare", label: "Prepare", hint: "Generate a brief or a time-blocked plan" },
   { id: "saved", label: "Saved prep", hint: "Reopen what's already on disk — free" },
+  { id: "questions", label: "Question bank", hint: "Every question you might be asked, and your answers — free" },
 ];
 
 export function InterviewWorkspace() {
@@ -66,6 +68,11 @@ export function InterviewWorkspace() {
             drop a run the user is already paying for. */}
         <div className={cn(pane === "prepare" ? "block" : "hidden")}>
           <InterviewForm onOpenSaved={openSaved} />
+        </div>
+        <div className={cn(pane === "questions" ? "block" : "hidden")}>
+          {/* Mounted lazily: the bank fetches on mount, and paying for that
+              round-trip on every visit to the Prepare pane is waste. */}
+          {pane === "questions" && <QuestionBankView />}
         </div>
         <div className={cn(pane === "saved" ? "block" : "hidden")}>
           <PrepLibrary onPrepare={() => setPane("prepare")} openSlug={openSlug} onOpened={() => setOpenSlug(undefined)} />
