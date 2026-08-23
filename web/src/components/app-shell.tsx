@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <ExploreProvider>
       <MobileNav />
       <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface/30 p-4 md:flex">
+        <aside className="ambient-glow sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface/30 p-4 md:flex">
           <Link href="/" className="mb-8 flex items-center gap-2.5 px-1">
             <CoMark size={32} />
             <span className={`${instrumentSerif.className} relative -top-px text-2xl font-normal tracking-tight text-landing`}>
@@ -70,7 +70,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </aside>
-        <main className="flex-1 overflow-x-hidden">{children}</main>
+        {/* overflow-x-CLIP, not hidden. `hidden` makes this a scroll container
+            on BOTH axes, and position:sticky then resolves against a box that
+            never scrolls — which silently killed every sticky header and TOC
+            rail inside the app (the interview document reader was where it
+            finally showed up). `clip` clips exactly the same overflow without
+            creating the scroll container.
+
+            min-w-0 is the other half: a flex item defaults to min-width:auto,
+            i.e. it refuses to shrink below its content's min-content width. One
+            wide table anywhere inside therefore set the whole app's minimum
+            width, and every phone got a horizontally clipped page — /pipeline
+            measured 903px against a 390px viewport. With min-w-0 the table
+            scrolls inside its own overflow-x-auto container, which is what that
+            container was always for. */}
+        <main className="min-w-0 flex-1 overflow-x-clip">{children}</main>
         <AssistantConsole />
         <FirstScoreView />
         <BetaBanner />
