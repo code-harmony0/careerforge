@@ -82,11 +82,11 @@
     "grok",
     "ai-agent-skill"
   ],
-  "author": "Santiago Fernández de Valderrama <hi@santifer.io> (https://santifer.io)",
-  "homepage": "https://santifer.io",
+  "author": "code-harmony0 (https://github.com/code-harmony0)",
+  "homepage": "https://github.com/code-harmony0/careerforge",
   "repository": {
     "type": "git",
-    "url": "https://github.com/santifer/career-ops"
+    "url": "https://github.com/code-harmony0/careerforge"
   },
   "license": "MIT",
   "dependencies": {
@@ -94,5 +94,11 @@
     "dotenv": "^17.0.0",
     "js-yaml": "^4.3.1",
     "playwright": "1.62.1"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/code-harmony0/careerforge/issues"
+  },
+  "contributors": [
+    "Santiago Fernandez de Valderrama <hi@santifer.io> (https://santifer.io) - original author of career-ops"
+  ]
 }

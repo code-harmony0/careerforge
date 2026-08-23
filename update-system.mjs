@@ -37,9 +37,19 @@ import { fileURLToPath, pathToFileURL } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
 
-const CANONICAL_REPO = 'https://github.com/santifer/career-ops.git';
-const RAW_VERSION_URL = 'https://raw.githubusercontent.com/santifer/career-ops/main/VERSION';
-const RELEASES_API = 'https://api.github.com/repos/santifer/career-ops/releases/latest';
+// This fork's own release line. `apply` OVERWRITES system-layer files from
+// whichever repo these name, so leaving them pointed upstream would let an
+// upstream release silently clobber this fork's divergent work. Upstream is
+// still reachable deliberately, via `git fetch upstream`, never automatically.
+//
+// Attribution: careerforge is a fork of career-ops
+// (https://github.com/santifer/career-ops), MIT licensed. The original
+// copyright is retained verbatim in LICENSE, which is where it legally belongs;
+// spelling the author's name here as well only trips this repo's own
+// personal-data scanner.
+const CANONICAL_REPO = 'https://github.com/code-harmony0/careerforge.git';
+const RAW_VERSION_URL = 'https://raw.githubusercontent.com/code-harmony0/careerforge/main/VERSION';
+const RELEASES_API = 'https://api.github.com/repos/code-harmony0/careerforge/releases/latest';
 
 // Matches a semver, with or without a leading `v` and an optional
 // Release Please component prefix (e.g. `career-ops-v1.9.0` → `1.9.0`).

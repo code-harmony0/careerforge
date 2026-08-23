@@ -10,7 +10,11 @@
 // release would be an unintended variable in every provider's fingerprint,
 // introduced without anyone deciding it should be there. Pin it.
 
-export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (compatible; career-ops/1.0; +https://github.com/santifer/career-ops)';
+// The URL in a crawler's User-Agent is how a site operator finds whoever is
+// responsible for the traffic. On a fork it must name the FORK, or a job board
+// rate-limiting this scraper goes looking for upstream's maintainer over
+// requests he did not make.
+export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (compatible; careerforge/1.0; +https://github.com/code-harmony0/careerforge)';
 
 /**
  * Browser-like User-Agent for callers that must clear WAF/CDN bot management

@@ -6,6 +6,13 @@
 
 </div>
 
+> **careerforge** is a fork of [career-ops](https://github.com/santifer/career-ops)
+> by [Santiago Fernandez de Valderrama](https://santifer.io), used and extended under the MIT licence.
+> The original copyright is retained in [LICENSE](LICENSE). Upstream fixes are pulled in
+> deliberately (`git fetch upstream`), never automatically, because this fork has diverged.
+> Bugs and feature requests for **this** fork belong here, not upstream.
+
+
 <p align="center">
   <a href="https://x.com/santifer"><img src="docs/hero-banner.jpg" alt="career-ops Multi-Agent Job Search System" width="800"></a>
 </p>
