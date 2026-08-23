@@ -25,6 +25,7 @@
 @theme inline {
   --color-background: var(--bg);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-surface-hover: var(--surface-hover);
   --color-border: var(--border);
   --color-foreground: var(--fg);
@@ -41,8 +42,10 @@
 :root {
   --bg: #f7f6f3; /* warm off-white (docs stone tone) */
   --surface: #ffffff;
+  --surface-2: #ffffff; /* raised tier (modals/popovers) — light mode leans on shadow, not tone */
   --surface-hover: #efeeea;
   --border: hsl(40 9% 86%);
+  --border-highlight: hsl(40 20% 100% / 0.6); /* inset top edge on elevated surfaces */
   --fg: hsl(30 10% 11%); /* warm near-black, high legibility */
   --muted: hsl(35 9% 34%); /* darker than before for readable body text */
   --faint: hsl(35 7% 42%); /* AA: ~4.6:1 on #fff (was 50% ≈ 3.9:1, failed small text) */
@@ -50,21 +53,42 @@
   --brand-text: hsl(26 80% 36%); /* darkened brand for small text: 5.5 white / 5.1 cream / 4.7 surface-hover */
   --dot: 40 8% 42% / 0.09;
   --pre-bg: #f2f1ed;
+  --shadow-color: 30 15% 25%; /* warm-tinted shadow, not flat black — reads as designed, not default */
+  --shadow-strength: 0.10;
+  --selection-bg: hsl(26 73% 51% / 0.22);
+  --scrollbar-thumb: hsl(35 9% 34% / 0.28);
+  --scrollbar-thumb-hover: hsl(35 9% 34% / 0.45);
+  --landing-glow: hsl(65 30% 30% / 0.09); /* olive, second ambient hue alongside brand orange */
   color-scheme: light;
 }
 
 .dark {
-  --bg: #0a0a0a;
-  --surface: #161616;
-  --surface-hover: #232323;
-  --border: #262626;
+  /* Warm-tinted near-black (hue 30, matching the brand/landing warmth) instead
+     of a neutral gray-black — a neutral dark reads as the unthemed default;
+     carrying the same undertone as light mode's warm off-white is what makes
+     both themes read as one designed system instead of two unrelated ones. */
+  --bg: hsl(30 8% 6%);
+  --surface: hsl(30 7% 10%);
+  /* Raised tier leans toward the landing/olive hue instead of repeating the
+     orange-neutral undertone — elevated surfaces get their own temperature,
+     one more place the app has two brand colors instead of one. */
+  --surface-2: hsl(45 8% 14%);
+  --surface-hover: hsl(30 6% 16%);
+  --border: hsl(32 8% 21%);
+  --border-highlight: hsl(50 20% 92% / 0.07); /* cream-tinted top-edge highlight — the depth cue that actually reads on near-black, since a black shadow alone is invisible on a black background */
   --fg: #fafafa;
   --muted: #a1a1aa;
   --faint: #8b8b95; /* AA: ~4.6:1 on #161616 (was #71717a ≈ 3.7:1, failed small text) */
   --landing: #e4e2d0; /* cream editorial headline */
   --brand-text: hsl(26 73% 51%); /* raw brand already passes in dark (≥4.95 on bg/surface) */
   --dot: 240 5% 65% / 0.10;
-  --pre-bg: #111111;
+  --pre-bg: hsl(30 8% 4%);
+  --shadow-color: 0 0% 0%;
+  --shadow-strength: 0.55;
+  --selection-bg: hsl(26 73% 51% / 0.28);
+  --scrollbar-thumb: hsl(0 0% 100% / 0.14);
+  --scrollbar-thumb-hover: hsl(0 0% 100% / 0.24);
+  --landing-glow: hsl(65 25% 75% / 0.08); /* cream, second ambient hue alongside brand orange */
   color-scheme: dark;
 }
 
@@ -76,6 +100,33 @@ body {
 }
 html {
   scrollbar-gutter: stable;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* Browser-default surfaces, themed — the parts a design system usually forgets. */
+::selection {
+  background: var(--selection-bg);
+  color: var(--fg);
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+:focus-visible {
+  outline: 2px solid hsl(26 73% 51% / 0.55);
+  outline-offset: 2px;
 }
 
 @layer utilities {
@@ -87,6 +138,51 @@ html {
   .dot-bg {
     background-image: radial-gradient(circle, hsl(var(--dot)) 1px, transparent 1px);
     background-size: 24px 24px;
+  }
+
+  /* Elevation — a real offset+blur shadow (two layers: tight+dense, loose+soft)
+     PLUS an inset top-edge highlight. The highlight is the part that actually
+     reads in dark mode: a black shadow is close to invisible on a near-black
+     background, so depth there comes from the lit edge, not the shadow alone. */
+  .shadow-elevated {
+    box-shadow:
+      inset 0 1px 0 0 var(--border-highlight),
+      0 2px 6px -2px hsl(var(--shadow-color) / calc(var(--shadow-strength) * 0.7)),
+      0 12px 28px -10px hsl(var(--shadow-color) / var(--shadow-strength));
+  }
+  .shadow-elevated-lg {
+    box-shadow:
+      inset 0 1px 0 0 var(--border-highlight),
+      0 4px 10px -4px hsl(var(--shadow-color) / calc(var(--shadow-strength) * 0.8)),
+      0 24px 48px -16px hsl(var(--shadow-color) / calc(var(--shadow-strength) * 1.2));
+  }
+
+  /* Restrained ambient glow — two brand hues (orange + the landing olive/cream),
+     not one repeated orange, pure CSS via ::before/::after so neither competes
+     with foreground content or scanability. */
+  .ambient-glow {
+    position: relative;
+    isolation: isolate;
+  }
+  .ambient-glow::before {
+    content: "";
+    position: absolute;
+    inset: -20% -20% auto auto;
+    width: 60%;
+    height: 40%;
+    background: radial-gradient(circle at top right, hsl(26 73% 51% / 0.10), transparent 70%);
+    pointer-events: none;
+    z-index: -1;
+  }
+  .ambient-glow::after {
+    content: "";
+    position: absolute;
+    inset: auto auto -15% -15%;
+    width: 55%;
+    height: 35%;
+    background: radial-gradient(circle at bottom left, var(--landing-glow), transparent 70%);
+    pointer-events: none;
+    z-index: -1;
   }
 }
 
@@ -156,6 +252,11 @@ html {
 .report-prose h3 { font-weight: 600; font-size: 1.05rem; margin: 1.6rem 0 0.5rem; }
 .report-prose h4 { font-weight: 600; font-size: 0.95rem; color: var(--muted); margin: 1.25rem 0 0.4rem; }
 .report-prose p { margin: 0.9rem 0; }
+/* Job-posting URLs and requisition ids are long, unbreakable single "words".
+   Without this one line a single 95-character URL sets the page's minimum
+   width and every phone gets a horizontally clipped document. break-word only
+   breaks a word that would otherwise overflow, so ordinary prose is untouched. */
+.report-prose p, .report-prose li, .report-prose a, .report-prose code { overflow-wrap: break-word; }
 .report-prose strong { color: var(--fg); font-weight: 600; }
 .report-prose a { color: var(--color-brand); text-decoration: none; }
 .report-prose a:hover { text-decoration: underline; }
@@ -215,3 +316,52 @@ html.dark .co-cost[data-tone="free"]{color:hsl(158 64% 60%);background:hsl(158 6
 .co-cost[data-tone="spend"]{color:hsl(35 9% 34%);background:hsl(35 8% 46% / .12);border-color:hsl(35 8% 46% / .26)}
 html.dark .co-cost[data-tone="spend"]{color:hsl(35 8% 70%);background:hsl(35 6% 60% / .12);border-color:hsl(35 6% 60% / .24)}
 .co-cost svg{width:.85em;height:.85em}
+
+/* ── Interview prep document reader ─────────────────────────────────────────
+   The brief is a DOCUMENT, and the three things a document needs that a chat
+   transcript doesn't: anchors that don't land under the sticky header, a way
+   to get the app chrome out of the way, and a printable form (this gets read
+   on a phone in a lobby, or on paper). */
+
+/* Anchor targets clear the sticky document header. rehype-slug puts the id on
+   the heading itself, so that is what a jump lands on. */
+.co-prep-doc .report-prose :is(h1, h2, h3, h4)[id] { scroll-margin-top: 5.5rem; }
+
+/* Focus mode — the sidebar, mobile nav and chat console are siblings of the
+   document tree, so this is the only place that can reach them. Class is set
+   on <html> by PrepDocument and removed on unmount. */
+html.co-focus-read aside,
+html.co-focus-read .co-mnav,
+html.co-focus-read .co-assistant-console { display: none !important; }
+html.co-focus-read .co-prep-doc { --co-doc-max: 74ch; }
+
+.co-print-only { display: none; }
+
+@media print {
+  /* Paper is not a dark theme. Force the light palette regardless of what the
+     screen is showing, or a dark-mode user prints a page of black ink. */
+  :root, html.dark {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #ffffff;
+    --surface-hover: #ffffff;
+    --border: #d4d4d4;
+    --fg: #111111;
+    --muted: #333333;
+    --faint: #555555;
+    --pre-bg: #f4f4f4;
+  }
+  body { background: #fff !important; }
+  aside,
+  .co-mnav,
+  .co-assistant-console,
+  .co-print-hide { display: none !important; }
+  .co-print-only { display: block; }
+  .co-prep-doc article { max-width: none !important; }
+  /* A section split across a page break is the main way a printed brief
+     becomes unusable — you lose the heading that says what you're reading. */
+  .report-prose h2, .report-prose h3 { break-after: avoid; page-break-after: avoid; }
+  .report-prose table, .report-prose pre, .report-prose blockquote { break-inside: avoid; }
+  .report-prose a::after { content: " (" attr(href) ")"; font-size: 0.85em; color: #555; }
+  .report-prose a[href^="#"]::after { content: ""; }
+}

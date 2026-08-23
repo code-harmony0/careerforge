@@ -9,15 +9,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
+import { slugify } from "./slugify.mjs";
 
-/**
- * Lowercase, non-alphanumeric runs -> single hyphen, trimmed.
- * @param {string} s
- * @returns {string}
- */
-export function slugify(s) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
+// slugify moved to ./slugify.mjs so client code can import the SAME rule
+// without pulling node:fs in through this module. Imported AND re-exported
+// (not `export ... from`, which creates no local binding — that left the
+// slugify() calls below referencing nothing and silently fell every candidate
+// slug back to the default) so existing callers are unaffected.
+export { slugify };
 
 /**
  * @typedef {Object} PdfPaths
