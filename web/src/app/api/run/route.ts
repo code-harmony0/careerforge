@@ -13,6 +13,7 @@ import { resolvePdfPaths, type PdfPaths } from "@/lib/pdf-paths.mjs";
 import { renderAndMarkPdf, writeCvHtml, pdfRunOutcome } from "@/lib/pdf-render.mjs";
 import { createCvEnvelopeFilter, type CvEnvelope } from "@/lib/cv-envelope.mjs";
 import { buildPrompt, isShellSafeCompanyName } from "@/lib/run-prompts.mjs";
+import { loadCompetencyChecker } from "@/lib/cv-review.mjs";
 import { claudeCliArgs } from "@/lib/claude-invocation.mjs";
 import { acquireTrackerWrite, releaseTrackerWrite } from "@/lib/core/run-registry";
 
@@ -80,6 +81,10 @@ export async function POST(req: Request) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
+
+  // Awaited here, before the stream opens: the call site is a sync child "close"
+  // handler (see the decisions gate below) and must not become async.
+  const competencyChecker = kind === "pdf" ? await loadCompetencyChecker(careerOpsRoot()) : null;
 
   // Precompute deterministic scratch + final paths so the agent never chooses
   // its own filenames — the backend owns naming, writing (#2185) and rendering
@@ -452,6 +457,26 @@ export async function POST(req: Request) {
           } else {
             sendWarnings(envelope.warnings);
             if (saveCv(pdfPaths, envelope)) {
+              // modes/pdf.md step 14a makes the agent ASK before putting
+              // anything on the CV that cv.md does not support. A headless run
+              // has no channel to receive that answer on, so the equivalent
+              // stop happens here: findings go to the client and the run ends
+              // WITHOUT a PDF. /api/cv-review resumes it once decisions arrive.
+              //
+              // Deliberately between saveCv and renderPdf. Earlier and there is
+              // no HTML to review; later and a PDF the user never approved
+              // already exists on disk, which is the thing being prevented.
+              const pending = competencyChecker ? competencyChecker(envelope.html) : [];
+              if (pending.length) {
+                send({
+                  type: "decisions",
+                  reportNum: input,
+                  format: envelope.format,
+                  items: pending,
+                });
+                send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, awaitingDecisions: true });
+                return close();
+              }
               // Tracked so cancel() can defer releasing writeToken until this
               // settles; close() happens once rendering finishes, not here.
               pdfRenderPromise = renderPdf(pdfPaths, envelope.format);

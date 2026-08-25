@@ -120,3 +120,55 @@ export function previewState(root, name, currentCvHash, manifest) {
   if (!m.cvHash || !currentCvHash || m.cvHash !== currentCvHash) return "stale";
   return "ready";
 }
+
+// ---------------------------------------------------------------------------
+// Generation lock.
+//
+// A lock FILE, not a module-level boolean: /api/cv-preview owns the run but
+// /api/cv-templates has to report it, and two route modules do not share
+// memory. A file is also the only version that survives a dev-server reload —
+// an in-memory flag left over from a crashed run wedges the button forever with
+// no way for the user to clear it except restarting the server.
+//
+// It carries a timestamp and expires, because the failure mode being guarded
+// against is a run that dies without cleaning up: the alternative to expiry is
+// a permanently stuck UI.
+const LOCK_NAME = ".generating";
+const LOCK_TTL_MS = 20 * 60 * 1000; // one agent pass + N Chromium renders, generously
+
+function lockPath(root) {
+  return path.join(previewDir(root), LOCK_NAME);
+}
+
+export function startGeneration(root) {
+  fs.mkdirSync(previewDir(root), { recursive: true });
+  fs.writeFileSync(lockPath(root), String(Date.now()), "utf8");
+}
+
+export function endGeneration(root) {
+  try {
+    fs.unlinkSync(lockPath(root));
+  } catch {
+    /* already gone — endGeneration is called from a finally and must not throw */
+  }
+}
+
+/**
+ * Is a generation in flight?
+ *
+ * A lock older than the TTL is treated as dead and removed, so a crashed run
+ * self-heals on the next check instead of needing a server restart.
+ */
+export function isGenerating(root) {
+  let started;
+  try {
+    started = Number.parseInt(fs.readFileSync(lockPath(root), "utf8"), 10);
+  } catch {
+    return false;
+  }
+  if (!Number.isFinite(started) || Date.now() - started > LOCK_TTL_MS) {
+    endGeneration(root);
+    return false;
+  }
+  return true;
+}

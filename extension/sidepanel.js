@@ -185,6 +185,8 @@ function resetActionPanel() {
   els.actionPanelError.classList.add("hidden");
   els.actionPanelBody.textContent = "";
 }
+let awaitingDecisions = false;
+
 function showActionBusy(label) {
   els.actionPanel.classList.remove("hidden");
   els.actionPanelStatus.classList.remove("hidden");
@@ -208,8 +210,96 @@ function panelLink(href, label) {
   return a;
 }
 
+/**
+ * Render the per-item add/drop question and resume the run once answered.
+ *
+ * Per ITEM, never all-or-nothing: a tailoring pass typically surfaces one claim
+ * that is genuinely true and undocumented alongside others that are only the job
+ * description talking, so one verdict for the whole list is the wrong shape.
+ */
+function showDecisions({ reportNum, format, items }, appN) {
+  els.actionPanelStatus.classList.add("hidden");
+  els.actionPanelBody.textContent = "";
+
+  const intro = document.createElement("p");
+  intro.className = "decisions-intro";
+  intro.textContent = `${items.length} thing${items.length === 1 ? "" : "s"} on this CV ${items.length === 1 ? "isn't" : "aren't"} in your cv.md. Keep or drop each:`;
+  els.actionPanelBody.appendChild(intro);
+
+  // Default DROP, not keep. The user is being asked precisely because cv.md
+  // does not support these, so an unanswered item must not ride onto the CV.
+  const chosen = new Map(items.map((t) => [t, "drop"]));
+
+  for (const tag of items) {
+    const row = document.createElement("div");
+    row.className = "decision-row";
+    const label = document.createElement("span");
+    label.className = "decision-tag";
+    label.textContent = tag;
+    const group = document.createElement("span");
+    group.className = "decision-actions";
+    for (const [action, text] of [["add", "Keep"], ["drop", "Drop"]]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = text;
+      b.className = "decision-btn" + (chosen.get(tag) === action ? " selected" : "");
+      b.onclick = () => {
+        chosen.set(tag, action);
+        for (const sib of group.querySelectorAll(".decision-btn")) sib.classList.remove("selected");
+        b.classList.add("selected");
+      };
+      group.appendChild(b);
+    }
+    row.append(label, group);
+    els.actionPanelBody.appendChild(row);
+  }
+
+  const go = document.createElement("button");
+  go.type = "button";
+  go.className = "decision-apply";
+  go.textContent = "Apply and make the PDF";
+  go.onclick = async () => {
+    go.disabled = true;
+    go.textContent = "Rendering…";
+    try {
+      const res = await fetch(`${serverUrl}/api/cv-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportNum,
+          format,
+          decisions: [...chosen].map(([tag, action]) => ({ tag, action })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showActionError(data.error || "Could not finish the CV.");
+        return;
+      }
+      awaitingDecisions = false;
+      els.actionPanelBody.textContent = "";
+      els.actionPanelBody.appendChild(
+        panelLink(`${serverUrl}/pipeline/${appN || reportNum}`, "Generated — view tailored CV →"),
+      );
+      // Kept claims are NOT written to cv.md here: "keep it on this CV" and
+      // "add it to my permanent CV" are different decisions, and the second one
+      // goes through add-entry.mjs's own confirm step.
+      if (data.pendingCvAdditions?.length) {
+        const note = document.createElement("p");
+        note.className = "decisions-intro";
+        note.textContent = `Kept on this CV but still not in cv.md: ${data.pendingCvAdditions.join(", ")}`;
+        els.actionPanelBody.appendChild(note);
+      }
+    } catch {
+      showActionError("Could not reach career-ops to finish the CV.");
+    }
+  };
+  els.actionPanelBody.appendChild(go);
+}
+
 function runPdf(reportNum, appN) {
   resetActionPanel();
+  awaitingDecisions = false;
   showActionBusy("Starting…");
   actionController = new AbortController();
   runJob({
@@ -219,7 +309,18 @@ function runPdf(reportNum, appN) {
     input: reportNum,
     signal: actionController.signal,
     onStatus: (label) => { els.actionPanelStatusText.textContent = label; },
-    onDone: () => {
+    onDecisions: (ev) => {
+      // The run stopped BEFORE rendering: the tailored CV asserts competencies
+      // cv.md does not support (modes/pdf.md step 14a). Nothing was rendered,
+      // so this replaces the result rather than annotating it.
+      awaitingDecisions = true;
+      showDecisions(ev, appN);
+    },
+    onDone: (d) => {
+      // A run that stopped to ask ends with done too — its panel is already
+      // showing the question and must not be overwritten with a success link
+      // for a PDF that was never rendered.
+      if (awaitingDecisions || d?.awaitingDecisions) return;
       actionController = null;
       els.actionPanelStatus.classList.add("hidden");
       // No reliable company slug is available client-side to hit /api/cv-pdf

@@ -478,3 +478,63 @@ body {
 }
 
 .hidden { display: none !important; }
+
+/* Per-item add/drop review — shown when a tailoring run stops to ask because
+   the CV asserts competencies cv.md does not support. */
+.decisions-intro {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.8;
+}
+.decision-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.18);
+}
+.decision-tag {
+  font-size: 12px;
+  line-height: 1.35;
+  /* The tag can be long; it wraps rather than pushing the buttons off-panel. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.decision-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+.decision-btn {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.decision-btn.selected {
+  border-color: transparent;
+  background: #2563eb;
+  color: #fff;
+}
+.decision-apply {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+.decision-apply:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import * as yaml from "js-yaml";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
-import { cvHash, previewState, readManifest } from "@/lib/cv-previews.mjs";
+import { cvHash, previewState, readManifest, isGenerating } from "@/lib/cv-previews.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +76,9 @@ export async function GET() {
 
   return Response.json({
     hasCv: cv !== null,
+    // Reported here so the gallery shows a live run it did not start itself —
+    // after a reload, or in a second tab.
+    generating: isGenerating(root),
     selected,
     generatedAt: manifest.generatedAt,
     templates: templates.map((t) => ({

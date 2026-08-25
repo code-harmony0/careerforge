@@ -16,6 +16,9 @@ import {
   readManifest,
   writeManifest,
   previewState,
+  startGeneration,
+  endGeneration,
+  isGenerating,
 } from "../../src/lib/cv-previews.mjs";
 
 function scratch() {
@@ -145,4 +148,57 @@ test("previewState: a PDF with no thumbnail is missing — the grid has nothing 
 
 test("thumbPath refuses a traversal name the same way previewPath does", () => {
   assert.throws(() => thumbPath("/tmp/root", "../../etc/passwd"), /unsafe template name/);
+});
+
+test("isGenerating: false when no run has started", () => {
+  const root = scratch();
+  try {
+    assert.equal(isGenerating(root), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("isGenerating: true between start and end", () => {
+  const root = scratch();
+  try {
+    startGeneration(root);
+    assert.equal(isGenerating(root), true);
+    endGeneration(root);
+    assert.equal(isGenerating(root), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("isGenerating: a crashed run self-heals instead of wedging the button forever", () => {
+  const root = scratch();
+  try {
+    // A lock left behind by a run that died — 21 minutes old, past the TTL.
+    writeFileSync(join(previewDir(root), ".generating"), String(Date.now() - 21 * 60 * 1000), "utf8");
+    assert.equal(isGenerating(root), false);
+    // and it is cleaned up, not merely ignored
+    assert.equal(isGenerating(root), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("isGenerating: a garbage lock is treated as dead, not as a live run", () => {
+  const root = scratch();
+  try {
+    writeFileSync(join(previewDir(root), ".generating"), "not-a-timestamp", "utf8");
+    assert.equal(isGenerating(root), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("endGeneration on a missing lock does not throw — it runs from a finally", () => {
+  const root = scratch();
+  try {
+    assert.doesNotThrow(() => endGeneration(root));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

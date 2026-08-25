@@ -7,7 +7,17 @@ import { spawnHeadlessCli } from "@/lib/spawn-cli.mjs";
 import { claudeCliArgs } from "@/lib/claude-invocation.mjs";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
 import { parseCvPayloadEnvelope, PAYLOAD_ENVELOPE_INSTRUCTION } from "@/lib/cv-payload-envelope.mjs";
-import { previewDir, previewPath, thumbPath, isSafeTemplateName, cvHash, writeManifest } from "@/lib/cv-previews.mjs";
+import {
+  previewDir,
+  previewPath,
+  thumbPath,
+  isSafeTemplateName,
+  cvHash,
+  writeManifest,
+  startGeneration,
+  endGeneration,
+  isGenerating,
+} from "@/lib/cv-previews.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,8 +84,9 @@ function listTemplateNames(root: string): Promise<string[]> {
 
 // One generation at a time. Two concurrent runs would interleave writes to the
 // same payload.json and the same seven PDFs, and the loser's manifest would
-// claim the winner's renders were built from a CV they were not.
-let generating = false;
+// claim the winner's renders were built from a CV they were not. The lock lives
+// in a file (see cv-previews.mjs) so /api/cv-templates can report it and so a
+// crashed run cannot wedge the button.
 
 export async function POST(req: Request) {
   let body: { cliId?: string };
@@ -104,8 +115,10 @@ export async function POST(req: Request) {
   const names = await listTemplateNames(root);
   if (!names.length) return Response.json({ error: "no CV templates found in templates/" }, { status: 500 });
 
-  if (generating) return Response.json({ error: "previews are already being generated" }, { status: 409 });
-  generating = true;
+  // 409 rather than an error the UI paints red: a second click during a live run
+  // is not a fault, and the client turns this into the in-progress state.
+  if (isGenerating(root)) return Response.json({ generating: true }, { status: 409 });
+  startGeneration(root);
   try {
     // One agent pass for the whole gallery. It reads cv.md and returns the
     // template-agnostic payload; it is NOT tailoring to any job, so no report,
@@ -198,6 +211,6 @@ export async function POST(req: Request) {
     writeManifest(root, { cvHash: cvHash(cv), failed });
     return Response.json({ ok: true, rendered: names.length - failed.length, failed });
   } finally {
-    generating = false;
+    endGeneration(root);
   }
 }

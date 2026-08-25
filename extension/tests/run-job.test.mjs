@@ -74,3 +74,39 @@ test("an error event still surfaces and stops the run", async () => {
   assert.equal(err, "boom");
   assert.equal(done, false, "error must return, not fall through to done");
 });
+
+test("a decisions event is surfaced, not reported as a finished CV", async () => {
+  // The run stopped to ask; no PDF exists. Routing this to onDone would tell the
+  // user their tailored CV is ready when nothing was rendered.
+  stubFetch([
+    { type: "decisions", reportNum: "041", format: "letter", items: ["SOLID Engineering Principles"] },
+    { type: "done", awaitingDecisions: true },
+  ]);
+  let asked;
+  let done = false;
+  await runJob({
+    ...base,
+    onStatus: () => {},
+    onDecisions: (d) => (asked = d),
+    onDone: () => (done = true),
+    onError: () => {},
+  });
+  assert.deepEqual(asked?.items, ["SOLID Engineering Principles"]);
+  assert.equal(asked.reportNum, "041");
+  assert.equal(done, true, "the run itself still ends");
+});
+
+test("a clean run never asks", async () => {
+  stubFetch([{ type: "status", label: "Rendering PDF…" }, { type: "done" }]);
+  let asked = null;
+  await runJob({ ...base, onStatus: () => {}, onDecisions: (d) => (asked = d), onDone: () => {}, onError: () => {} });
+  assert.equal(asked, null);
+});
+
+test("a driver with no onDecisions handler does not crash", async () => {
+  // Older side-panel code, or the evaluate path, passes no handler.
+  stubFetch([{ type: "decisions", items: ["X"] }, { type: "done" }]);
+  await assert.doesNotReject(
+    runJob({ ...base, onStatus: () => {}, onDone: () => {}, onError: () => {} }),
+  );
+});

@@ -8,6 +8,10 @@
 //   onStatus(label)   — a short human-readable progress line
 //   onText(fullText)  — the growing accumulated agent text (for kinds whose
 //                       result IS the text, e.g. cover letters)
+//   onDecisions({reportNum, format, items}) — the run stopped to ASK before
+//                       rendering: the CV asserts competencies cv.md does not
+//                       support. No PDF exists yet. Resolve per item and POST
+//                       to /api/cv-review to resume.
 //   onDone({text, ...doneEvent})
 //   onError(message)
 //   onAborted()        — signal was aborted (user hit Stop); not an error
@@ -19,7 +23,7 @@ export function fmtElapsed(ms) {
   return m ? `${m}m ${s}s` : `${s}s`;
 }
 
-export async function runJob({ serverUrl, cliId, kind, input, signal, onStatus, onText, onDone, onError, onAborted }) {
+export async function runJob({ serverUrl, cliId, kind, input, signal, onStatus, onText, onDecisions, onDone, onError, onAborted }) {
   const startedAt = Date.now();
   let res;
   try {
@@ -91,6 +95,10 @@ export async function runJob({ serverUrl, cliId, kind, input, signal, onStatus, 
           // not depend on OPTIONAL events — the web run log survives the same
           // silence because it ticks its own elapsed clock (worker-card.tsx).
           onStatus(`${phase} · ${fmtElapsed(Date.now() - startedAt)}`);
+        } else if (ev.type === "decisions") {
+          // Emitted INSTEAD of a render. Handing it to onDone would report a
+          // tailored CV that does not exist yet.
+          onDecisions?.(ev);
         } else if (ev.type === "text") {
           text += ev.text;
           onText?.(text);
