@@ -24,6 +24,10 @@ export type Job = {
    *  the job page can link straight to it (the streamed text is often just
    *  the terse VERDICT line — the real report lives at /pipeline/{reportNum}). */
   reportNum?: string;
+  /** Set when a pdf run stopped BEFORE rendering to ask about competencies
+   *  cv.md does not support (modes/pdf.md step 14a's headless equivalent).
+   *  No PDF exists yet — /api/cv-review renders one once these are resolved. */
+  pendingDecisions?: { reportNum: string; format: string; items: string[] };
   startedAt: number;
   endedAt?: number;
 };
@@ -193,6 +197,13 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
                   if (vm) verdictLine = vm[0];
                   text = full.slice(-8000);
                   patch(id, (j) => ({ ...j, text }));
+                } else if (ev.type === "decisions") {
+                  // Emitted INSTEAD of a render, so it is stored on the job
+                  // rather than pushed as a step: the job page turns it into a
+                  // per-item question, and a "done" that follows must not be
+                  // presented as a finished CV.
+                  const pending = { reportNum: String(ev.reportNum ?? ""), format: String(ev.format ?? "letter"), items: Array.isArray(ev.items) ? ev.items.map(String) : [] };
+                  if (pending.items.length) patch(id, (j) => ({ ...j, pendingDecisions: pending }));
                 } else if (ev.type === "done") {
                   // finish happens on stream-close; capture the per-run cost (and,
                   // for evaluate, the report number) it carries

@@ -1,11 +1,12 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { markdownComponents } from "@/components/markdown-components";
+import { CvDecisionsPanel } from "@/components/jobs/cv-decisions-panel";
 import { ArrowLeft, Loader2, Wrench, CircleDot, Check, X, RotateCcw, FileText } from "lucide-react";
 import { useJobs } from "@/components/jobs/job-store";
 import { HeroGlow } from "@/components/hero-glow";
@@ -17,6 +18,9 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   const { jobs, startJob } = useJobs();
   const router = useRouter();
   const job = jobs.find((j) => j.id === id);
+  // Local, not on the job: resolving the question renders a PDF and does not
+  // change the run that produced it.
+  const [resolved, setResolved] = useState<{ pendingCvAdditions: string[] } | null>(null);
 
   if (!job) {
     return (
@@ -104,6 +108,28 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
           </li>
         )}
       </ol>
+
+      {job.pendingDecisions && !resolved && (
+        <div className="mt-8">
+          <CvDecisionsPanel
+            pending={job.pendingDecisions}
+            onResolved={(r) => setResolved(r)}
+          />
+        </div>
+      )}
+
+      {resolved && (
+        <div className="mt-8 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+          <p className="text-sm text-foreground">Tailored CV rendered.</p>
+          {resolved.pendingCvAdditions.length > 0 && (
+            // Kept on this CV is NOT the same as added to cv.md — the second is
+            // a user-layer write that goes through add-entry.mjs's own confirm.
+            <p className="mt-1 text-xs text-muted">
+              Kept on this CV but still not in your cv.md: {resolved.pendingCvAdditions.join(", ")}
+            </p>
+          )}
+        </div>
+      )}
 
       {job.text && (
         <div className="mt-8">
