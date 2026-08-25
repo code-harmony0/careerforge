@@ -89,6 +89,7 @@
     /* no storage access on this page — the pill just keeps its CSS default */
   }
 
+  let fadeTimer;
   let dragging = false;
   let moved = false;
   let originX = 0;
@@ -98,6 +99,15 @@
 
   pill.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
+    // A press that lands on a faded pill wakes it and stops there. Dropping
+    // pointer-events instead made it ungrabbable for the full fade window —
+    // measured: scroll, drag immediately, nothing moves — and letting the press
+    // through would fire a capture from a pill the user could barely see.
+    if (pill.classList.contains("co-scrolling")) {
+      clearTimeout(fadeTimer);
+      pill.classList.remove("co-scrolling");
+      return;
+    }
     dragging = true;
     moved = false;
     originX = e.clientX;
@@ -149,6 +159,37 @@
       e.preventDefault();
       e.stopPropagation();
     }
+  });
+
+  // --- get out of the way while reading -----------------------------------
+  // The pill is position:fixed so it stays reachable on a long posting, which
+  // also means it sits on top of whatever you are reading. Fading it during
+  // scroll keeps both properties: out of the way while the page moves, back
+  // without having to hunt for it once it stops.
+  //
+  // Never fades mid-drag or mid-capture: a pill that vanishes under the cursor
+  // reads as a crash, and hiding "capturing…" hides the only progress signal
+  // there is.
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (dragging || busy) return;
+      pill.classList.add("co-scrolling");
+      clearTimeout(fadeTimer);
+      // Long enough to stay faded through a flick-scroll's momentum, short
+      // enough that it is back before you reach for it.
+      fadeTimer = setTimeout(() => pill.classList.remove("co-scrolling"), 600);
+    },
+    // passive: this handler never calls preventDefault, and saying so keeps it
+    // off the browser's scrolling critical path.
+    { passive: true },
+  );
+
+  // Hovering or touching it brings it straight back — waiting out the timer to
+  // click something under your cursor is the wrong feel.
+  pill.addEventListener("pointerenter", () => {
+    clearTimeout(fadeTimer);
+    pill.classList.remove("co-scrolling");
   });
 
   window.addEventListener("resize", () => {

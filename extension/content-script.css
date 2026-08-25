@@ -36,3 +36,24 @@
   opacity: 1;
   background: #374151;
 }
+
+/* Faded while the page scrolls (see content-script.js): the pill is fixed so it
+   stays reachable, which also means it covers what you are reading.
+
+   Pointer events stay ON. `pointer-events: none` looked right — a faded pill
+   should not swallow a click meant for the page underneath — but it also made
+   the pill ungrabbable for the whole 600ms after any scroll, which is exactly
+   when you reach for it. Measured: scroll, then drag immediately, and nothing
+   moved. content-script.js swallows the interaction that lands on a faded pill
+   instead, so it un-fades without firing a capture. */
+#career-ops-pill.co-scrolling {
+  opacity: 0.12;
+}
+/* Dragging and capturing both outrank the fade — a pill that vanishes under the
+   cursor reads as a crash, and hiding "capturing…" hides the only progress
+   signal the capture has. */
+#career-ops-pill.co-dragging,
+#career-ops-pill.co-busy {
+  opacity: 1;
+  pointer-events: auto;
+}

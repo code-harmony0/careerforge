@@ -1,0 +1,16 @@
+<!-- Harness for pill.test.mjs: the REAL content-script.js/.css with the two
+     chrome APIs it touches stubbed. Kept because the drag and scroll-fade bugs
+     were both only visible in a browser, never in a unit test. -->
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../content-script.css">
+<body style="height:4000px;margin:0">
+<h1>tall page</h1>
+<script>
+  // Minimal stubs for the two chrome APIs the pill touches.
+  window.chrome = {
+    runtime: { sendMessage: (m, cb) => cb && cb({ ok: true }), lastError: null, onMessage: { addListener(){} } },
+    storage: { local: { get: (k, cb) => cb({}), set: () => {} } },
+  };
+  self.careerOpsExtract = { capturePage: () => ({}), extractFormFields: () => ({}) };
+</script>
+<script src="../../content-script.js"></script>
