@@ -1,4 +1,5 @@
 // extension/lib/run-evaluate.js
+import { fmtElapsed } from "./run-job.js";
 // Drives the same /api/run contract web/src/components/jobs/job-store.tsx's
 // startJob() uses — but reports STRUCTURED progress/result callbacks instead
 // of a growing wall of raw text, so the side panel can render a real status
@@ -50,6 +51,8 @@ export async function runEvaluate({ serverUrl, cliId, url, signal, onStatus, onD
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
+  const startedAt = Date.now();
+  let phase = "Working…";
   let buf = "";
   let text = "";
   let verdictLine = "";
@@ -74,15 +77,24 @@ export async function runEvaluate({ serverUrl, cliId, url, signal, onStatus, onD
           continue;
         }
         if (ev.type === "tool") {
-          onStatus(`Reading ${ev.name}…`);
+          phase = `Reading ${ev.name}…`;
+          onStatus(phase);
         } else if (ev.type === "status") {
-          onStatus(String(ev.label || "Working…"));
+          phase = String(ev.label || "Working…");
+          onStatus(phase);
+        } else if (ev.type === "keepalive") {
+          // Same defect as run-job.js: liveness must not depend on OPTIONAL
+          // events. A CLI with no structured event stream (6 of the 8 supported)
+          // can go minutes between text chunks while the model thinks, and an
+          // unchanging label reads as a hang.
+          onStatus(`${phase} · ${fmtElapsed(Date.now() - startedAt)}`);
         } else if (ev.type === "text") {
           const full = text + ev.text;
           const vm = full.match(/VERDICT:[^\n]*/i);
           if (vm) verdictLine = vm[0];
           text = full.slice(-4000);
-          onStatus("Writing the report…");
+          phase = "Writing the report…";
+          onStatus(phase);
         } else if (ev.type === "done" && typeof ev.reportNum === "string") {
           reportNum = ev.reportNum;
           if (typeof ev.appN === "string") appN = ev.appN;
