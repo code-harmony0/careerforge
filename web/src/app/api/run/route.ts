@@ -322,7 +322,26 @@ export async function POST(req: Request) {
           if (line) processParsedLine(line);
         }
       });
+      // Every stderr byte, verbatim, to .career-ops-web/run-stderr.log.
+      //
+      // What reaches the client is one 200-char slice of whichever line first
+      // matched the fatal pattern — enough to say "something failed", never
+      // enough to say WHAT. When a CLI reports its own failure ("agent
+      // terminated due to error") that truncated echo is the only record, and it
+      // names neither the cause nor the run. Diagnosing then depends on the user
+      // reproducing it while someone watches, which is exactly the loop this
+      // avoids. Append-only, local, and never sent anywhere.
+      const logStderr = (chunk: string) => {
+        try {
+          const dir = path.join(careerOpsRoot(), ".career-ops-web");
+          fs.mkdirSync(dir, { recursive: true });
+          fs.appendFileSync(path.join(dir, "run-stderr.log"), `[${new Date().toISOString()}] ${kind}/${input} ${cliId}: ${chunk}`);
+        } catch {
+          /* diagnostics must never take down the run they are diagnosing */
+        }
+      };
       child.stderr.on("data", (chunk: string) => {
+        logStderr(chunk);
         // Match on COMPLETE lines. A chunk boundary can fall mid-word, so testing a
         // raw chunk both misses an error split across two of them and can match a
         // fragment that is not the word it looks like. sawError feeds pdfRunOutcome,
