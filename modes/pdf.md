@@ -40,15 +40,18 @@ Run `npm run jd:similarity -- {bundle-root}/jd/current.md {bundle-root}/jd/previ
 14a. **ASK BEFORE ADDING ANYTHING NOT IN `cv.md`. This is a stop, not a note.** Before building the payload, list every competency tag, summary phrase, or bullet claim you are about to put on the CV that is not already supported by `cv.md` / `article-digest.md`, and put the question to the user — one line each, with what you were going to write and why it isn't backed:
 
     ```
-    3 things aren't in your CV yet:
+    3 things aren't in your CV yet — answer per number (e.g. "1 add, 2 drop, 3 add"):
+
       1. SOLID Engineering Principles      — JD asks for it; no bullet in cv.md mentions SOLID
       2. PropTech & Marketplace Super Apps — you have marketplace work; "PropTech" appears nowhere
       3. Product discovery                 — JD phrase; no supporting bullet
 
-    For each: add it to cv.md (it's true and just undocumented), or drop it from this CV?
+    add = it's real, put it in cv.md · drop = leave it off this CV
     ```
 
-    Then wait. Do not build the payload, do not render, do not decide on their behalf, and never quietly keep the phrasing because "it's basically implied". Two outcomes only:
+    **Each item is decided separately.** Never collapse the list into one all-or-nothing question, never apply one answer to the whole list, and never assume that a decision on item 1 settles items 2 and 3. Mixed answers are the normal case — a tailoring pass usually surfaces one thing that is genuinely true and undocumented alongside two that are the JD talking. If the user answers about only some of the items, act on those and re-ask the remainder rather than guessing the rest.
+
+    Then wait. Do not build the payload, do not render, do not decide on their behalf, and never quietly keep the phrasing because "it's basically implied". Per item, two outcomes only:
     - **Add** → it is a real part of their experience they never wrote down. Put it in `cv.md` via `node add-entry.mjs` (confirm-before-write, dedup). It is now legitimately theirs for every future CV, not just this one.
     - **Drop** → it does not go on the CV. Say so plainly rather than substituting a near-synonym that dodges the check.
 
