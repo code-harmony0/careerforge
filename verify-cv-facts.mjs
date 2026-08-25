@@ -396,13 +396,85 @@ export function verifyFacts(targetText, {
   const warnings = config.warn_phrases
       .filter(Boolean)
       .filter(phrase => stripMarkup(targetText).toLowerCase().includes(String(phrase).toLowerCase()));
+  const unsupportedCompetencies = unsupportedCompetencyTags(targetText, sourceNormalized, allowedFacts);
+  // Advisory by default. An invented METRIC is a fabrication with one right
+  // answer, so it blocks. A competency tag is a judgement call — reframing real
+  // work in a job description's vocabulary is legitimate, and only the person
+  // whose CV it is can say which side of the line a tag falls on. A hard stop on
+  // a judgement call is the kind of check people switch off wholesale, taking
+  // the useful signal with it. Set block_unsupported_competencies in
+  // config/cv-facts.json to make it fail the run instead.
+  const competenciesBlock = config.block_unsupported_competencies === true && unsupportedCompetencies.length > 0;
   return {
-    verdict: invented.length || unsupportedFacts.length || forbidden.length ? 'block' : warnings.length ? 'warn' : 'pass',
+    verdict:
+      invented.length || unsupportedFacts.length || forbidden.length || competenciesBlock
+        ? 'block'
+        : warnings.length || unsupportedCompetencies.length
+          ? 'warn'
+          : 'pass',
     invented,
     unsupportedFacts,
+    unsupportedCompetencies,
     forbidden,
     warnings,
   };
+}
+
+/**
+ * Competency-grid tags asserted by a generated CV.
+ *
+ * The grid is built FROM the job description by design (modes/pdf.md step 13),
+ * which is exactly why it is the easiest place for a tailoring pass to drift
+ * into claims the candidate never made. Measured on a real generated CV: every
+ * metric traced correctly and the gate passed, while the grid asserted "SOLID
+ * Engineering Principles", "PropTech & Marketplace Super Apps" and "Multi-Rail
+ * Payments & UAE FinTech" — none of them anywhere in cv.md. Numbers, employers
+ * and titles were checked; the grid was not a category the gate looked at.
+ *
+ * Keyed on the `competency-tag` class, which 8 of the 9 shipped templates emit
+ * and which build-cv-html.mjs's fallback builder always emits.
+ */
+export function competencyClaims(text) {
+  const tags = [];
+  const re = /<[a-z]+[^>]*class="[^"]*\bcompetency-tag\b[^"]*"[^>]*>([\s\S]*?)<\/[a-z]+>/gi;
+  let m;
+  while ((m = re.exec(String(text ?? ''))) !== null) {
+    const tag = stripMarkup(m[1]).replace(/\s+/g, ' ').trim();
+    if (tag) tags.push(tag);
+  }
+  return tags;
+}
+
+// Connectors and filler carry no claim of their own. Requiring them to appear
+// in cv.md would flag essentially every tag, so they are dropped before
+// matching — the significant terms are what a reviewer reads as a claim.
+const COMPETENCY_STOPWORDS = new Set([
+  'and', 'or', 'of', 'the', 'a', 'an', 'for', 'to', 'in', 'on', 'with', 'amp',
+]);
+
+/** Significant, comparable terms in a competency tag. */
+function competencyTerms(tag) {
+  return normalizeFact(stripMarkup(tag))
+    .split(/[^a-z0-9+#]+/i)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 1 && !COMPETENCY_STOPWORDS.has(t));
+}
+
+/**
+ * Tags whose terms are not all present in the source.
+ *
+ * ALL terms must appear, not merely one: the tag is the unit a reviewer reads,
+ * so "Multi-Rail Payments & UAE FinTech" asserts FinTech domain experience even
+ * though the payments half is real work. Partial credit would let a true half
+ * carry an untrue half onto the page.
+ */
+function unsupportedCompetencyTags(text, sourceNormalized, allowedFacts) {
+  return competencyClaims(text).filter((tag) => {
+    if (allowedFacts.has(normalizeFact(tag))) return false;
+    const terms = competencyTerms(tag);
+    if (!terms.length) return false;
+    return !terms.every((term) => sourceNormalized.includes(term));
+  });
 }
 
 /** Verify a document and throw when it contains a blocking unsupported claim. */
@@ -412,6 +484,8 @@ export function assertFacts(targetText, options = {}) {
     const details = [];
     if (result.invented.length) details.push(`metric-like claims absent from sources: ${result.invented.join(', ')}`);
     if (result.unsupportedFacts.length) details.push(`non-metric facts absent from sources: ${result.unsupportedFacts.map(({ kind, value }) => `${kind}=${value}`).join(', ')}`);
+    if (result.unsupportedCompetencies.length)
+      details.push(`competencies absent from sources: ${result.unsupportedCompetencies.join(', ')}`);
     if (result.forbidden.length) details.push(`forbidden phrases found: ${result.forbidden.join(', ')}`);
     throw new Error(`Fact check failed${options.label ? ` for ${options.label}` : ''}: ${details.join('; ')}`);
   }

@@ -8,6 +8,7 @@
  * 2. config/profile.yml exists and has required fields
  * 3. No hardcoded metrics in _shared.md or batch/batch-prompt.md
  * 4. article-digest.md freshness (if exists)
+ * 5. cv.md and config/profile.yml AGREE about the facts they both state
  */
 
 import { readFileSync, existsSync, statSync } from 'fs';
@@ -42,6 +43,57 @@ if (!existsSync(profilePath)) {
     if (!profileContent.includes(field) || profileContent.includes(`"Jane Smith"`)) {
       warnings.push(`config/profile.yml may still have example data. Check field: ${field}`);
       break;
+    }
+  }
+}
+
+// 5. Do cv.md and profile.yml CONTRADICT each other?
+//
+// Checks 1 and 2 above ask whether the files EXIST. Nothing asked whether they
+// agree — so on 2026-08-25 this script printed "All checks passed" while
+// cv.md said "open to relocation" and profile.yml said "relocating to
+// Bengaluru". modes/pdf.md maps candidate.location straight into the CV
+// header, so the narrower of the two contradicting claims shipped in a PDF.
+//
+// Same failure class AGENTS.md already documents for story-bank provenance: a
+// claim gets checked against A source, and the sources are never reconciled
+// with EACH OTHER. Two sources of truth with no comparison is one source of
+// truth and one silent liar.
+function locationLine(text) {
+  // The cv.md contact line: the header block before the first "##" section.
+  const head = text.split(/^##\s/m)[0] || '';
+  const line = head.split(/\r?\n/).find((l) => /@|linkedin|\|/i.test(l));
+  return line ? line.trim() : '';
+}
+
+function significantPlaces(text) {
+  // Capitalised place-ish words, minus the ones that are structural noise.
+  const NOISE = new Set(['Email', 'Phone', 'LinkedIn', 'India', 'Open', 'Remote', 'Currently']);
+  return new Set(
+    (String(text).match(/\b[A-Z][a-z]{3,}\b/g) || []).filter((w) => !NOISE.has(w)),
+  );
+}
+
+if (existsSync(cvPath) && existsSync(profilePath)) {
+  const cvText = readFileSync(cvPath, 'utf-8');
+  const profileText = readFileSync(profilePath, 'utf-8');
+  const profileLocation = (profileText.match(/^\s*location:\s*(.+)$/m) || [])[1] || '';
+  const cvLocation = locationLine(cvText);
+
+  if (profileLocation && cvLocation) {
+    const inProfile = significantPlaces(profileLocation);
+    const inCv = significantPlaces(cvLocation);
+    // A place named by exactly one of the two is a disagreement about a fact
+    // both files state. Not an error — the user may have a reason — but it must
+    // never be silent, because the generator will pick one without telling them.
+    const onlyProfile = [...inProfile].filter((p) => !inCv.has(p));
+    const onlyCv = [...inCv].filter((p) => !inProfile.has(p));
+    if (onlyProfile.length || onlyCv.length) {
+      warnings.push(
+        `cv.md and config/profile.yml disagree about location. ` +
+        `profile.yml: "${profileLocation.trim()}" · cv.md: "${cvLocation}". ` +
+        `The CV header is built from profile.yml, so that is the version recruiters see.`,
+      );
     }
   }
 }
