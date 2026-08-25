@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { CvTemplateGallery } from "@/components/cv-template-gallery";
 
 export function CvEditor() {
   const [content, setContent] = useState("");
@@ -13,6 +14,7 @@ export function CvEditor() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [tab, setTab] = useState<"edit" | "templates">("edit");
 
   useEffect(() => {
     fetch("/api/cv")
@@ -47,16 +49,23 @@ export function CvEditor() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl tracking-tight text-landing">CV editor</h1>
+          <h1 className="font-display text-2xl tracking-tight text-landing">CV</h1>
           <p className="mt-1 text-sm text-muted">
-            Edit <code className="text-foreground">cv.md</code> with live preview.
-            {!exists && loaded && <span className="ml-1 text-faint">No cv.md yet — start typing to create it.</span>}
+            {tab === "edit" ? (
+              <>
+                Edit <code className="text-foreground">cv.md</code> with live preview.
+                {!exists && loaded && <span className="ml-1 text-faint">No cv.md yet — start typing to create it.</span>}
+              </>
+            ) : (
+              <>Pick the template your PDFs are built from.</>
+            )}
           </p>
         </div>
         <button
           type="button"
           onClick={save}
           disabled={saving || !dirty}
+          hidden={tab !== "edit"}
           className={cn(
             "inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition-colors max-sm:min-h-[44px]",
             dirty
@@ -69,7 +78,32 @@ export function CvEditor() {
         </button>
       </div>
 
-      {!loaded ? (
+      <div className="mt-5 flex gap-1 border-b border-border" role="tablist">
+        {([
+          ["edit", "Edit"],
+          ["templates", "Templates"],
+        ] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={cn(
+              "-mb-px border-b-2 px-4 py-2 text-sm transition-colors max-sm:min-h-[44px]",
+              tab === id
+                ? "border-brand font-medium text-foreground"
+                : "border-transparent text-muted hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "templates" ? (
+        <CvTemplateGallery />
+      ) : !loaded ? (
         <div className="mt-6 text-sm text-muted">Loading…</div>
       ) : (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
