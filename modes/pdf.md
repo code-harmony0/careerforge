@@ -37,6 +37,24 @@ Run `npm run jd:similarity -- {bundle-root}/jd/current.md {bundle-root}/jd/previ
 12. Reorder experience bullets by JD relevance and by the risk map: strongest matching evidence first
 13. Build competency grid from JD requirements (6-8 keyword phrases), prioritizing `existing` and `supportedByResume` skills from Step 4 — never a `gap` skill. Prefer phrases also demonstrated in at least one bullet selected for this CV — a grid tag with no supporting bullet reads as keyword stuffing to a sharp reviewer even when truthful. When a real JD requirement has no demonstrating bullet anywhere in `cv.md`, that's a `gap` per Step 4 — surface it to the user rather than papering over it with an undemonstrated grid tag
 14. Inject keywords naturally into existing achievements (NEVER invent)
+14a. **ASK BEFORE ADDING ANYTHING NOT IN `cv.md`. This is a stop, not a note.** Before building the payload, list every competency tag, summary phrase, or bullet claim you are about to put on the CV that is not already supported by `cv.md` / `article-digest.md`, and put the question to the user — one line each, with what you were going to write and why it isn't backed:
+
+    ```
+    3 things aren't in your CV yet:
+      1. SOLID Engineering Principles      — JD asks for it; no bullet in cv.md mentions SOLID
+      2. PropTech & Marketplace Super Apps — you have marketplace work; "PropTech" appears nowhere
+      3. Product discovery                 — JD phrase; no supporting bullet
+
+    For each: add it to cv.md (it's true and just undocumented), or drop it from this CV?
+    ```
+
+    Then wait. Do not build the payload, do not render, do not decide on their behalf, and never quietly keep the phrasing because "it's basically implied". Two outcomes only:
+    - **Add** → it is a real part of their experience they never wrote down. Put it in `cv.md` via `node add-entry.mjs` (confirm-before-write, dedup). It is now legitimately theirs for every future CV, not just this one.
+    - **Drop** → it does not go on the CV. Say so plainly rather than substituting a near-synonym that dodges the check.
+
+    Why this is a stop: the competency grid is built FROM the job description (Step 13), so it is the one part of the CV that pulls from a source that is not the user. A measured run put "SOLID Engineering Principles", "PropTech & Marketplace Super Apps" and "Multi-Rail Payments & UAE FinTech" on a CV where every number was correct — the metrics gate passed it, because invention had moved into the grid. Asking costs one message. Being asked about SOLID in an interview because the CV led with it costs the interview.
+
+    Backed by code, not just this instruction: `verify-cv-facts.mjs` reports `unsupportedCompetencies` at Step 19. It warns rather than blocks (the user owns the judgement call), so this step is where the user actually gets consulted — the gate is the backstop, not the conversation.
 15. Apply the six-second clarity gate from `modes/heuristics/recruiter-side.md`: top third must make target role, strongest fit, and proof obvious
 16. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
 17. Build the render payload (see the **JSON Input Schema** below) from the tailored content — emit compact structured JSON, **not** full HTML markup — and write it to `/tmp/cv-{candidate}-{company}.json`
