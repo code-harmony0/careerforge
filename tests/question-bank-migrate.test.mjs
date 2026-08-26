@@ -1,11 +1,11 @@
 // tests/question-bank-migrate.test.mjs — `migrate` adopts a schema change on
 // purpose: it must add the new column, refuse rather than drop rows it cannot
 // parse, and do nothing at all (including to the .bak) when there is nothing to do.
-import { pass, fail, run, ROOT, NODE, rmSync, linkRepoPackage } from './helpers.mjs';
+import { pass, fail, run, ROOT, NODE, rmSync, linkRepoPackage, lastRunFailure } from './helpers.mjs';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, cpSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { parseQuestionBank, serializeQuestionBank } from '../lib/question-bank.mjs';
+import { parseQuestionBank, serializeQuestionBank, COLUMNS } from '../lib/question-bank.mjs';
 
 console.log('\nquestion-bank.mjs — migrate');
 
@@ -107,6 +107,49 @@ else fail('migrate rewrote the bank despite an unparseable row');
 if (!existsSync(`${brokenBank}.bak`)) pass('the refused migrate did not even take a .bak');
 else fail('migrate took a .bak on a run it refused');
 rmSync(brokenDir, { recursive: true, force: true });
+
+// ── an unrecognized header must stop migrate, not empty the bank ─────────────
+// parseQuestionBank only records `skipped` for rows found AFTER a recognized
+// header. One typo in the ID or Question cell and it returns zero rows AND zero
+// skipped -- so a guard that watches only `skipped` waves through a rewrite that
+// deletes every question under a success banner. Worse than one lost row.
+const typoDir = makeSandbox();
+const typoBank = join(typoDir, 'interview-prep', 'question-bank.md');
+const typoHeader = [
+  '# Question Bank', '',
+  '| Ident | Prompt | Axis | Tag | Round | Source | Status | Asked | Last |',
+  '|---|---|---|---|---|---|---|---|---|',
+  '| q001 | What is JSI | tech | react-native | peer-tech | pack:rn | 🔴 | 2 | 2026-08-01 |',
+  '| q002 | What is Hermes | tech | react-native | peer-tech | pack:rn | new | 0 |  |',
+  '',
+].join('\n');
+writeFileSync(typoBank, typoHeader);
+const typoRun = run(NODE, ['question-bank.mjs', 'migrate'], { cwd: typoDir });
+const typoStderr = lastRunFailure()?.stderr ?? '';
+if (typoRun === null) pass('migrate refuses when the header row is not recognized');
+else fail(`migrate emptied the bank and exited 0: ${typoRun}`);
+if (readFileSync(typoBank, 'utf8') === typoHeader) pass('the refused migrate left the typo\'d bank byte-identical');
+else fail('migrate rewrote a bank whose header it could not recognize');
+if (!existsSync(`${typoBank}.bak`)) pass('the refused migrate took no .bak for a typo\'d header');
+else fail('migrate took a .bak on a run it refused');
+// "no rows found" would send the user hunting through their questions; the
+// header is the actual cause, so the message has to say so and name what it needs.
+if (/header/i.test(typoStderr) && /\bID\b/.test(typoStderr) && /Question/i.test(typoStderr)) {
+  pass('the error names the header row and the required ID/Question columns');
+} else fail(`error message does not point at the header: ${JSON.stringify(typoStderr)}`);
+rmSync(typoDir, { recursive: true, force: true });
+
+// ── a genuinely empty bank is legitimate, and must still migrate ─────────────
+// The guard above must key off the header, not off "zero questions" -- a user
+// who ran `migrate` on a freshly created, still-empty bank has done nothing wrong.
+const blankDir = makeSandbox();
+const blankBank = join(blankDir, 'interview-prep', 'question-bank.md');
+writeFileSync(blankBank, ['# Question Bank', '', ...HEADER, ''].join('\n'));
+const blankRun = run(NODE, ['question-bank.mjs', 'migrate'], { cwd: blankDir });
+const blankAfter = readFileSync(blankBank, 'utf8');
+if (blankRun !== null && blankAfter.includes(`| ${COLUMNS.join(' | ')} |`)) pass('an empty bank with a valid header still migrates');
+else fail(`migrate refused a legitimately empty bank (exit ok: ${blankRun !== null})`);
+rmSync(blankDir, { recursive: true, force: true });
 
 // ── migrate is not a bank-creating command ───────────────────────────────────
 const emptyDir = makeSandbox();
