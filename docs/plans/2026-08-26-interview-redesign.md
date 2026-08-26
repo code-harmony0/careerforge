@@ -24,6 +24,35 @@ with only Node.
 - Run everything: `node test-all.mjs`
 - Lint: `npm run lint`
 
+## Sandbox fixture requirements (learned the hard way in Task 2)
+
+Any test that spawns a CLI into a temp-dir sandbox MUST do both of these. Task
+2's original fixture did neither, and produced four passing assertions from a
+child process that had crashed before it ever ran.
+
+**1. Check `run()`'s return value.** `run()` in `tests/helpers.mjs` returns
+`null` on a non-zero exit, which is indistinguishable from empty stdout unless
+you check it. A crashed CLI leaves the fixture file untouched, and "untouched"
+satisfies most naive assertions:
+
+```javascript
+const ran = run(NODE, ['some-script.mjs', 'cmd'], { cwd: dir });
+if (ran !== null && /* your real assertion */) pass('...');
+else fail(`script failed or did not do the thing (exit ok: ${ran !== null})`);
+```
+
+**2. Copy the whole import closure, not just the entry point.** Node resolves
+from the sandbox's realpath, so it never falls back to the repo `node_modules`.
+`question-bank.mjs` alone is not enough — it pulls in `tracker-utils.mjs`,
+which needs `js-yaml`, `pipeline-lock.mjs`, `tracker-parse.mjs`, and
+`tracker-aliases.json`. Use the EXISTING `linkRepoPackage(dir, 'js-yaml')`
+helper from `tests/helpers.mjs` for npm packages. Never add new helpers to
+`tests/helpers.mjs` — adapt the test instead.
+
+**3. Guard `.every()` against an empty array.** `[].every(fn)` is `true`, so an
+assertion over a fixture that stopped parsing reports success — precisely the
+regression it exists to catch. Assert the length first.
+
 Two parsers read the question bank and must never drift:
 `lib/question-bank.mjs` (root) and `web/src/lib/question-bank-read.mjs` (web).
 Any column change touches both.
