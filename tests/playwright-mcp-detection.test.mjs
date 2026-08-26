@@ -21,13 +21,30 @@ const DOCTOR = join(ROOT, 'doctor.mjs');
 // Scenarios that exercise the plugin path pass their own CLAUDE_CONFIG_DIR.
 const EMPTY_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'co-mcp-emptycfg-'));
 
+/**
+ * Child env for a doctor run, with the developer's own CLI choice removed.
+ *
+ * doctor.mjs resolves --cli > $CAREER_OPS_CLI > .env > default. These suites
+ * assert what doctor does BY DEFAULT, so inheriting an ambient CAREER_OPS_CLI
+ * makes their outcome depend on whoever runs them: measured on this repo, a
+ * .env saying `antigravity` turned 14 of these green assertions red, while a
+ * machine with no .env passed. Deleting it here is the same defence the
+ * CLAUDE_CONFIG_DIR line already applies, for the same reason.
+ *
+ * A scenario's explicit env still wins — it is spread last — so the cases that
+ * DO exercise env precedence keep working.
+ */
+function hermeticDoctorEnv(env) {
+  const merged = { ...process.env, CLAUDE_CONFIG_DIR: EMPTY_CONFIG_DIR, ...env };
+  if (!env || !('CAREER_OPS_CLI' in env)) delete merged.CAREER_OPS_CLI;
+  return merged;
+}
+
 function runDoctor(cwd, args, env) {
   try {
     const out = execFileSync(NODE, [DOCTOR, '--json', '--target', cwd, ...args], {
       cwd,
-      // Order matters: the empty dir must override an ambient CLAUDE_CONFIG_DIR
-      // from the developer's own shell, while a scenario's explicit env still wins.
-      env: { ...process.env, CLAUDE_CONFIG_DIR: EMPTY_CONFIG_DIR, ...env },
+      env: hermeticDoctorEnv(env),
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();

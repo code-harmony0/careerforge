@@ -184,6 +184,29 @@ async function runDiscovered(filter = null) {
     // checks with it, with no verdict line at all — #2828.) A discovered suite
     // is a guest, not a co-host: its crash is one failure, not the end of the
     // run.
+    // Snapshot/restore process.env around the import. Discovered suites run
+    // IN-PROCESS and therefore share ONE environment, so anything a suite (or a
+    // module it imports) writes there outlives it and reaches every suite
+    // sorting after it.
+    //
+    // That is not hypothetical: several root modules call dotenv at import time
+    // (batch-evaluate-gemini.mjs, scan.mjs, scan-hn.mjs, the eval scripts), and
+    // importing one publishes the developer's whole .env into this process.
+    // CAREER_OPS_CLI is among those keys, and doctor.mjs ranks an exported env
+    // var ABOVE .env precisely because exporting one is meant to be a
+    // deliberate override — so the doctor suites saw the developer's personal
+    // CLI instead of the default they assert, and failed. 14 of them on a
+    // machine whose .env said antigravity, none on a machine with no .env.
+    //
+    // The tell was that those suites PASSED under `--only`, which skips the
+    // suites that leak, and failed only in a full run. That reads as a flaky
+    // pre-existing failure rather than a test-harness bug, which is how it
+    // survived: an env-dependent suite is green on the maintainer's box.
+    //
+    // Restoring here rather than fixing each leaker keeps the guarantee true
+    // for the next module that loads dotenv at import time, instead of
+    // relitigating it per suite.
+    const envBefore = { ...process.env };
     try {
       await import(pathToFileURL(f).href);
     } catch (err) {
@@ -193,6 +216,11 @@ async function runDiscovered(filter = null) {
       for (const line of String(err?.stack ?? '').split('\n').slice(1, 4)) {
         if (line.trim()) console.log(`      ${line.trim()}`);
       }
+    } finally {
+      // Mutate in place: process.env is a live object other modules may already
+      // hold a reference to, so reassigning it would leave them on the stale one.
+      for (const k of Object.keys(process.env)) if (!(k in envBefore)) delete process.env[k];
+      for (const [k, v] of Object.entries(envBefore)) if (process.env[k] !== v) process.env[k] = v;
     }
   }
 }
@@ -12372,7 +12400,16 @@ try {
   // warning assertion below fails. Same reasoning as the GIT_CONFIG_* pinning
   // in section 12c.
   const emptyClaudeCfg = mkdtempSync(join(tmpdir(), 'co-emptycfg-'));
-  const doctorEnv = { env: { ...process.env, CLAUDE_CONFIG_DIR: emptyClaudeCfg } };
+  // CAREER_OPS_CLI is dropped for the same reason CLAUDE_CONFIG_DIR is pinned:
+  // these assertions describe the FIXTURE, and doctor resolves
+  // --cli > $CAREER_OPS_CLI > .env > default. A developer whose .env selects a
+  // CLI doctor cannot scan MCP configs for (anything but claude/opencode today)
+  // gets a "check skipped" advisory instead of the warning under test — measured
+  // here with `CAREER_OPS_CLI=antigravity`, which failed both assertions below
+  // while passing on a machine with no .env at all.
+  const doctorEnvVars = { ...process.env, CLAUDE_CONFIG_DIR: emptyClaudeCfg };
+  delete doctorEnvVars.CAREER_OPS_CLI;
+  const doctorEnv = { env: doctorEnvVars };
 
   // No project MCP config → doctor surfaces a (non-fatal) warning instead of
   // letting SPA job boards fail silently.

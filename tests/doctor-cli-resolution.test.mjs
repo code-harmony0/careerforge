@@ -18,7 +18,14 @@ function runDoctor(cwd, args, env) {
   try {
     const out = execFileSync(NODE, [DOCTOR, '--json', '--target', cwd, ...args], {
       cwd,
-      env: { ...process.env, ...env },
+      // CAREER_OPS_CLI is dropped unless the scenario sets it: these cases pin
+      // doctor's own precedence, and an ambient value from the developer's .env
+      // silently answered the question the test was asking.
+      env: (() => {
+        const merged = { ...process.env, ...env };
+        if (!env || !('CAREER_OPS_CLI' in env)) delete merged.CAREER_OPS_CLI;
+        return merged;
+      })(),
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
