@@ -21,6 +21,7 @@
  *   node question-bank.mjs status <id> <new|🔴|🟡|✅> [--note "..."]
  *   node question-bank.mjs due [--limit 10] [--summary]
  *   node question-bank.mjs seed [--stack react-native,javascript] [--dry-run]
+ *   node question-bank.mjs migrate
  *
  * Exit codes: 0 ok · 1 usage/validation error · 4 lock timeout (busy, retry).
  */
@@ -50,6 +51,7 @@ const USAGE = `question-bank — the only writer of interview-prep/question-bank
   status <id> <new|🔴|🟡|✅> [--asked]
   due   [--limit N] [--stale 14] [--summary]
   seed  [--stack react-native,javascript] [--dry-run] [--summary]
+  migrate  rewrite the bank under the current column set (adds columns added since it was written)
 
 JSON by default; --summary prints a human table. Exit: 0 ok · 1 usage · 4 busy.`;
 
@@ -245,7 +247,26 @@ async function main() {
     return;
   }
 
-  die(`unknown command "${cmd}". Try: list, add, status, due, seed.`);
+  // WHY THIS EXISTS. A bank written before a column was added still parses
+  // fine — parseQuestionBank is header-driven — and the next ordinary write
+  // already rewrites it under the current COLUMNS. So this is a convenience,
+  // NOT a data-safety fix: nothing is lost without it.
+  //
+  // What it buys is doing that on purpose, at a moment the user chose. Without
+  // it the rewrite happens as a side effect of the next unrelated `add` or
+  // `status`, which is a surprising diff on a gitignored file whose only undo
+  // is the .bak that same write just overwrote. Run deliberately, the .bak
+  // holds the pre-migration bank and the diff is the schema change alone.
+  if (cmd === 'migrate') {
+    const { questions, skipped } = readBank();
+    await writeBank(questions);
+    out({ schema_version: 1, migrated: questions.length, skipped },
+      (d) => console.log(`Migrated ${d.migrated} row(s) to the current schema.` +
+        (d.skipped.length ? ` Skipped malformed line(s): ${d.skipped.join(', ')}` : '')));
+    return;
+  }
+
+  die(`unknown command "${cmd}". Try: list, add, status, due, seed, migrate.`);
 }
 
 main().catch((e) => die(e?.message ?? String(e)));
