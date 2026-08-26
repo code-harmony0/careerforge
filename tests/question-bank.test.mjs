@@ -20,6 +20,7 @@ const row = (over = {}) => ({
   question: "Explain the bridge vs JSI",
   axis: "tech",
   tag: "react-native",
+  level: "moderate",
   round: "peer-tech",
   source: "pack:react-native",
   status: "new",
