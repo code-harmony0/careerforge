@@ -51,7 +51,7 @@ const USAGE = `question-bank — the only writer of interview-prep/question-bank
   status <id> <new|🔴|🟡|✅> [--asked]
   due   [--limit N] [--stale 14] [--summary]
   seed  [--stack react-native,javascript] [--dry-run] [--summary]
-  migrate  rewrite the bank under the current column set (adds columns added since it was written)
+  migrate  rewrite the bank under the current column set; no-op if already current, refuses if any row is unparseable
 
 JSON by default; --summary prints a human table. Exit: 0 ok · 1 usage · 4 busy.`;
 
@@ -252,17 +252,42 @@ async function main() {
   // already rewrites it under the current COLUMNS. So this is a convenience,
   // NOT a data-safety fix: nothing is lost without it.
   //
-  // What it buys is doing that on purpose, at a moment the user chose. Without
-  // it the rewrite happens as a side effect of the next unrelated `add` or
-  // `status`, which is a surprising diff on a gitignored file whose only undo
-  // is the .bak that same write just overwrote. Run deliberately, the .bak
-  // holds the pre-migration bank and the diff is the schema change alone.
+  // What it buys is doing that on purpose, at a moment the user chose, instead
+  // of as a side effect of the next unrelated `add` or `status` — a surprising
+  // diff on a gitignored file whose only undo is the .bak that same write just
+  // overwrote.
+  //
+  // WHY IT REFUSES ON A MALFORMED ROW, when add/status/seed do not. readBank()
+  // reports rows it could not parse and writeBank() then persists only the
+  // survivors, so any write silently deletes them. For add/status/seed that
+  // loss is collateral to a mutation the user actually asked for; for migrate
+  // it would be the command's ENTIRE net effect, since a legacy bank already
+  // parses. And migrate is the one command that is optional and deferrable, so
+  // refusing costs nothing. Fix the row by hand, then migrate.
+  //
+  // WHY IT SKIPS THE WRITE WHEN NOTHING CHANGES. Rewriting a bank that is
+  // already current would replace the .bak with a copy of itself — so a second
+  // run would destroy the pre-migration bank the first run saved. Comparing
+  // bytes first makes idempotence structural instead of incidental.
   if (cmd === 'migrate') {
+    if (!existsSync(BANK)) {
+      out({ schema_version: 1, migrated: 0, changed: false, reason: 'no-bank', skipped: [] },
+        () => console.log(`No bank at ${BANK} — nothing to migrate. Create one with \`seed\` or \`add\`.`));
+      return;
+    }
+    const current = readFileSync(BANK, 'utf8');
     const { questions, skipped } = readBank();
+    if (skipped.length) {
+      die(`refusing to migrate: line(s) ${skipped.join(', ')} of ${BANK} could not be parsed, and migrating would DELETE them. Fix them by hand, then run migrate again.`);
+    }
+    if (serializeQuestionBank(questions) === current) {
+      out({ schema_version: 1, migrated: 0, changed: false, reason: 'already-current', total: questions.length, skipped: [] },
+        (d) => console.log(`Already on the current schema — nothing written. Bank holds ${d.total} question(s).`));
+      return;
+    }
     await writeBank(questions);
-    out({ schema_version: 1, migrated: questions.length, skipped },
-      (d) => console.log(`Migrated ${d.migrated} row(s) to the current schema.` +
-        (d.skipped.length ? ` Skipped malformed line(s): ${d.skipped.join(', ')}` : '')));
+    out({ schema_version: 1, migrated: questions.length, changed: true, reason: 'migrated', total: questions.length, skipped: [] },
+      (d) => console.log(`Migrated ${d.migrated} row(s) to the current schema. Previous bank kept at ${BANK}.bak.`));
     return;
   }
 
