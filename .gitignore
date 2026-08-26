@@ -180,3 +180,9 @@ scratch/
 # suite in tests/, but they still don't belong in the repo.
 /test-agy*.js
 /test-pw.mjs
+
+# Isolated worktrees (superpowers:using-git-worktrees)
+.worktrees/
+
+# Firecrawl scratch output
+.firecrawl/
