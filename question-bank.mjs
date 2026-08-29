@@ -21,6 +21,7 @@
  *   node question-bank.mjs status <id> <new|🔴|🟡|✅> [--note "..."]
  *   node question-bank.mjs due [--limit 10] [--summary]
  *   node question-bank.mjs seed [--stack react-native,javascript] [--dry-run]
+ *   node question-bank.mjs migrate
  *
  * Exit codes: 0 ok · 1 usage/validation error · 4 lock timeout (busy, retry).
  */
@@ -50,6 +51,7 @@ const USAGE = `question-bank — the only writer of interview-prep/question-bank
   status <id> <new|🔴|🟡|✅> [--asked]
   due   [--limit N] [--stale 14] [--summary]
   seed  [--stack react-native,javascript] [--dry-run] [--summary]
+  migrate  rewrite the bank under the current column set; no-op if already current, refuses if any row is unparseable
 
 JSON by default; --summary prints a human table. Exit: 0 ok · 1 usage · 4 busy.`;
 
@@ -245,7 +247,70 @@ async function main() {
     return;
   }
 
-  die(`unknown command "${cmd}". Try: list, add, status, due, seed.`);
+  // WHY THIS EXISTS. A bank written before a column was added still parses
+  // fine — parseQuestionBank is header-driven — and the next ordinary write
+  // already rewrites it under the current COLUMNS. So this is a convenience,
+  // NOT a data-safety fix: nothing is lost without it.
+  //
+  // What it buys is doing that on purpose, at a moment the user chose, instead
+  // of as a side effect of the next unrelated `add` or `status` — a surprising
+  // diff on a gitignored file whose only undo is the .bak that same write just
+  // overwrote.
+  //
+  // WHY IT REFUSES INSTEAD OF WRITING, when add/status/seed do not. writeBank()
+  // persists exactly what the parser understood, so anything the parser did not
+  // understand is deleted by the write. For add/status/seed that loss is
+  // collateral to a mutation the user actually asked for; for migrate it would
+  // be the command's ENTIRE net effect, since a legacy bank already parses.
+  // Migrate is also the one command that is optional and deferrable, so
+  // refusing costs the user nothing. It refuses on exactly two conditions:
+  //
+  //   1. `skipped` is non-empty — individual rows the parser could not read.
+  //   2. the file has table-shaped lines but no recognized header. This is NOT
+  //      covered by (1): `skipped` only ever collects rows found AFTER a header
+  //      is recognized, so one typo in the `ID` or `Question` cell yields zero
+  //      rows AND zero skipped, and a `skipped`-only guard would wave through a
+  //      rewrite that empties the whole bank under a success banner. A header
+  //      that parses with zero rows under it is a legitimately empty bank and
+  //      is allowed through.
+  //
+  // KNOWN LIMITATIONS, deliberately not fixed here. A successful migrate keeps
+  // the rows and nothing else: prose, notes or a custom title around the table
+  // are replaced by serializeQuestionBank's own preamble, and a column the user
+  // added by hand is dropped, both without appearing in `skipped`. Whether
+  // migrate should preserve those is an open question, tracked separately —
+  // until it is answered, the .bak is the only copy of them.
+  //
+  // WHY IT SKIPS THE WRITE WHEN NOTHING CHANGES. Rewriting a bank that is
+  // already current would replace the .bak with a copy of itself — so a second
+  // run would destroy the pre-migration bank the first run saved. Comparing
+  // bytes first makes idempotence structural instead of incidental.
+  if (cmd === 'migrate') {
+    if (!existsSync(BANK)) {
+      out({ schema_version: 1, migrated: 0, changed: false, outcome: 'no-bank' },
+        () => console.log(`No bank at ${BANK} — nothing to migrate. Create one with \`seed\` or \`add\`.`));
+      return;
+    }
+    const current = readFileSync(BANK, 'utf8');
+    const { questions, skipped, header, tableLines } = readBank();
+    if (skipped.length) {
+      die(`refusing to migrate: line(s) ${skipped.join(', ')} of ${BANK} could not be parsed, and migrating would DELETE them. Fix them by hand, then run migrate again.`);
+    }
+    if (!header.length && tableLines > 0) {
+      die(`refusing to migrate: ${BANK} has a table but its header row was not recognized, so every row in it is invisible and migrating would DELETE them all. The header must contain both an \`ID\` and a \`Question\` column — check it for a typo, then run migrate again.`);
+    }
+    if (serializeQuestionBank(questions) === current) {
+      out({ schema_version: 1, migrated: 0, changed: false, outcome: 'already-current', total: questions.length },
+        (d) => console.log(`Already on the current schema — nothing written. Bank holds ${d.total} question(s).`));
+      return;
+    }
+    await writeBank(questions);
+    out({ schema_version: 1, migrated: questions.length, changed: true, outcome: 'rewritten', total: questions.length },
+      (d) => console.log(`Migrated ${d.migrated} row(s) to the current schema. Previous bank kept at ${BANK}.bak.`));
+    return;
+  }
+
+  die(`unknown command "${cmd}". Try: list, add, status, due, seed, migrate.`);
 }
 
 main().catch((e) => die(e?.message ?? String(e)));
