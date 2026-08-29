@@ -205,12 +205,24 @@
 if (!self.__coFormListenerInstalled) {
   self.__coFormListenerInstalled = true;
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg?.type !== "career-ops:extract-form") return false;
-    try {
-      sendResponse({ ok: true, form: self.careerOpsExtract.extractFormFields(document) });
-    } catch (e) {
-      sendResponse({ ok: false, error: String(e?.message || e) });
+    if (msg?.type === "career-ops:extract-form") {
+      try {
+        sendResponse({ ok: true, form: self.careerOpsExtract.extractFormFields(document) });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e?.message || e) });
+      }
+      return false;
     }
-    return false; // synchronous response — no keepalive needed
+    if (msg?.type === "career-ops:fill-form") {
+      try {
+        const results = self.careerOpsExtract.fillFormFields(document, msg.answers || {});
+        sendResponse({ ok: true, results });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e?.message || e) });
+      }
+      return false;
+    }
+    return false;
   });
 }
+

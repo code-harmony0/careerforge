@@ -40,16 +40,22 @@ async function draftFromTab({ serverUrl, cliId, tabId, signal, onStatus, onField
   let resp;
   try {
     resp = await chrome.tabs.sendMessage(tabId, { type: "career-ops:extract-form" });
-  } catch (e) {
-    // "Could not establish connection. Receiving end does not exist." — by
-    // far the most common cause: the tab was already open BEFORE the
-    // extension was last reloaded at chrome://extensions. Chrome does not
-    // retroactively inject new/updated content-script code into tabs that
-    // were already loaded — only reloading (or re-navigating) THAT TAB picks
-    // up the current content-script.js. A chrome:// page or a closed tab
-    // throws the same way, so the message covers both.
-    onError(`Couldn't read that tab — reload the JOB PAGE tab itself (not just the extension) and try again. (${e?.message || e})`);
-    return;
+  } catch {
+    // Content scripts not loaded (tab was open before extension reload).
+    // Inject them on the fly and retry once.
+    try {
+      onStatus("Injecting content scripts…");
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["lib/extract.js", "lib/extract-form.js", "lib/fill-form.js", "content-script.js"],
+      });
+      // Brief pause for scripts to initialize.
+      await new Promise((r) => setTimeout(r, 200));
+      resp = await chrome.tabs.sendMessage(tabId, { type: "career-ops:extract-form" });
+    } catch (e2) {
+      onError(`Couldn't read that tab — reload the JOB PAGE tab itself (not just the extension) and try again. (${e2?.message || e2})`);
+      return;
+    }
   }
   if (aborted()) return onAborted?.();
   if (!resp?.ok) {

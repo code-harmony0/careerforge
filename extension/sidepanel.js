@@ -172,7 +172,7 @@ function wireResultActions({ reportNum, appN, url, tabId }) {
     els.actionStatus.onclick = () => showStatusSelect(appN);
   }
   if (url) {
-    els.actionApply.onclick = () => runApplyDraft(url, tabId);
+    els.actionApply.onclick = () => runApplyDraft(url, tabId, { reportNum, appN });
   }
 }
 
@@ -217,7 +217,7 @@ function panelLink(href, label) {
  * that is genuinely true and undocumented alongside others that are only the job
  * description talking, so one verdict for the whole list is the wrong shape.
  */
-function showDecisions({ reportNum, format, items }, appN) {
+function showDecisions({ reportNum, format, items }, appN, company) {
   els.actionPanelStatus.classList.add("hidden");
   els.actionPanelBody.textContent = "";
 
@@ -278,9 +278,15 @@ function showDecisions({ reportNum, format, items }, appN) {
       }
       awaitingDecisions = false;
       els.actionPanelBody.textContent = "";
-      els.actionPanelBody.appendChild(
-        panelLink(`${serverUrl}/pipeline/${appN || reportNum}`, "Generated — view tailored CV →"),
-      );
+      if (company) {
+        const link = panelLink(`${serverUrl}/api/cv-pdf?company=${encodeURIComponent(company)}`, "📄 Download tailored CV");
+        link.className = "cv-download-link";
+        els.actionPanelBody.appendChild(link);
+      } else {
+        els.actionPanelBody.appendChild(
+          panelLink(`${serverUrl}/pipeline/${appN || reportNum}`, "Generated — view tailored CV →"),
+        );
+      }
       // Kept claims are NOT written to cv.md here: "keep it on this CV" and
       // "add it to my permanent CV" are different decisions, and the second one
       // goes through add-entry.mjs's own confirm step.
@@ -297,8 +303,9 @@ function showDecisions({ reportNum, format, items }, appN) {
   els.actionPanelBody.appendChild(go);
 }
 
-function runPdf(reportNum, appN) {
+async function runPdf(reportNum, appN) {
   resetActionPanel();
+  const company = await lookupCompanyByReport(reportNum) || companyFromTitle(activeCapture?.title);
   awaitingDecisions = false;
   showActionBusy("Starting…");
   actionController = new AbortController();
@@ -314,7 +321,7 @@ function runPdf(reportNum, appN) {
       // cv.md does not support (modes/pdf.md step 14a). Nothing was rendered,
       // so this replaces the result rather than annotating it.
       awaitingDecisions = true;
-      showDecisions(ev, appN);
+      showDecisions(ev, appN, company);
     },
     onDone: (d) => {
       // A run that stopped to ask ends with done too — its panel is already
@@ -323,12 +330,13 @@ function runPdf(reportNum, appN) {
       if (awaitingDecisions || d?.awaitingDecisions) return;
       actionController = null;
       els.actionPanelStatus.classList.add("hidden");
-      // No reliable company slug is available client-side to hit /api/cv-pdf
-      // directly (guessing wrong would show someone else's tailored CV) — the
-      // report page's own "View tailored CV" link already resolves it correctly.
-      // /pipeline/{n} navigates by the tracker ROW number (appN), not the
-      // report file number — see wireResultActions's header comment.
-      els.actionPanelBody.appendChild(panelLink(`${serverUrl}/pipeline/${appN || reportNum}`, "Generated — view tailored CV →"));
+      if (company) {
+        const link = panelLink(`${serverUrl}/api/cv-pdf?company=${encodeURIComponent(company)}`, "📄 Download tailored CV");
+        link.className = "cv-download-link";
+        els.actionPanelBody.appendChild(link);
+      } else {
+        els.actionPanelBody.appendChild(panelLink(`${serverUrl}/pipeline/${appN || reportNum}`, "Generated — view tailored CV →"));
+      }
     },
     onError: showActionError,
     onAborted: () => showActionError("Stopped."),
@@ -436,7 +444,7 @@ function renderApplyFields(fields, answers) {
 // screenshot's "draft form answers" quick action) — both drive the same
 // draftApplication() and just need the outcome rendered into a different
 // container (the action panel vs. a chat bubble).
-function renderApplyOutcome(container, url, { fields, answers, needsDrive, truncated }) {
+function renderApplyOutcome(container, url, { fields, answers, needsDrive, truncated }, tabId, cvCompany) {
   if (needsDrive) {
     const note = document.createElement("div");
     note.textContent = "This form needs a few clicks before its fields show up (multi-step) — open it in career-ops instead:";
@@ -456,16 +464,125 @@ function renderApplyOutcome(container, url, { fields, answers, needsDrive, trunc
     container.appendChild(warn);
   }
   container.appendChild(renderApplyFields(fields, answers));
-  const note = document.createElement("div");
-  note.style.marginTop = "8px";
-  note.style.color = "#6b7280";
-  note.style.fontSize = "11px";
-  note.textContent = "Draft only — copy these into the real form yourself, or let career-ops fill it in for you:";
-  container.appendChild(note);
-  const link = panelLink(`${serverUrl}/apply?url=${encodeURIComponent(url)}`, "Open in career-ops to fill it →");
-  link.style.marginTop = "6px";
-  link.style.display = "inline-block";
-  container.appendChild(link);
+
+  // ── auto-fill button ─────────────────────────────────────────────────
+  // ALWAYS shown — the whole point is filling from the extension itself.
+  // If we already know the tabId great; otherwise we resolve the active
+  // tab at click time (covers pasted URLs and session-based drafts where
+  // tabId wasn't available when the draft started).
+  const fillBtn = document.createElement("button");
+  fillBtn.type = "button";
+  fillBtn.className = "fill-form-btn";
+  fillBtn.innerHTML = '<span class="fill-icon">✨</span> Fill form on this page';
+  const fillStatus = document.createElement("div");
+  fillStatus.className = "fill-status hidden";
+  fillBtn.addEventListener("click", async () => {
+    fillBtn.disabled = true;
+    fillBtn.textContent = "Filling…";
+    fillStatus.className = "fill-status hidden";
+    fillStatus.textContent = "";
+    // Remove any previous error details.
+    fillStatus.querySelectorAll(".fill-error-detail").forEach((el) => el.remove());
+
+    // Build the answers map keyed by co* field IDs.
+    const answersMap = {};
+    for (const f of fields) {
+      const a = answers[f.id];
+      if (a && (a.value ?? "").trim()) {
+        answersMap[f.id] = { value: String(a.value).trim(), label: f.label || f.id, type: f.type || "text" };
+      }
+    }
+    if (Object.keys(answersMap).length === 0) {
+      fillStatus.className = "fill-status fill-error";
+      fillStatus.textContent = "No drafted answers to fill — try pre-filling from your CV first.";
+      fillBtn.disabled = false;
+      fillBtn.innerHTML = '<span class="fill-icon">✨</span> Fill form on this page';
+      return;
+    }
+
+    // Resolve the target tab: use the pre-resolved tabId, or find the
+    // active tab (the one the user is looking at right now).
+    let targetTabId = tabId;
+    if (targetTabId == null) {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab?.id && /^https?:\/\//i.test(activeTab.url || "")) {
+          targetTabId = activeTab.id;
+        }
+      } catch {
+        /* no active tab reachable */
+      }
+    }
+    if (targetTabId == null) {
+      fillStatus.className = "fill-status fill-error";
+      fillStatus.textContent = "No reachable tab — open the application form in a tab first, then try again.";
+      fillBtn.disabled = false;
+      fillBtn.innerHTML = '<span class="fill-icon">✨</span> Fill form on this page';
+      return;
+    }
+
+    // Helper: send the fill message, auto-injecting content scripts if needed.
+    async function sendFillMessage(tid, msg) {
+      try {
+        return await chrome.tabs.sendMessage(tid, msg);
+      } catch {
+        // Content scripts not loaded — inject and retry once.
+        await chrome.scripting.executeScript({
+          target: { tabId: tid },
+          files: ["lib/extract.js", "lib/extract-form.js", "lib/fill-form.js", "content-script.js"],
+        });
+        await new Promise((r) => setTimeout(r, 200));
+        return await chrome.tabs.sendMessage(tid, msg);
+      }
+    }
+
+    try {
+      const resp = await sendFillMessage(targetTabId, { type: "career-ops:fill-form", answers: answersMap });
+      if (!resp?.ok) {
+        fillStatus.className = "fill-status fill-error";
+        fillStatus.textContent = resp?.error || "Couldn't fill — reload the job page tab and try again.";
+      } else {
+        const r = resp.results;
+        if (r.filled > 0 && r.skipped === 0) {
+          fillStatus.className = "fill-status fill-success";
+          fillStatus.textContent = `Filled ${r.filled} field${r.filled === 1 ? "" : "s"} ✓ — review and submit the form yourself.`;
+        } else if (r.filled > 0) {
+          fillStatus.className = "fill-status fill-partial";
+          fillStatus.textContent = `Filled ${r.filled}/${r.filled + r.skipped} fields — ${r.skipped} need manual attention.`;
+        } else {
+          fillStatus.className = "fill-status fill-error";
+          fillStatus.textContent = "Couldn't fill any fields — the form may have changed. Try reloading the page.";
+        }
+        if (r.errors?.length) {
+          for (const err of r.errors.slice(0, 5)) {
+            const errLine = document.createElement("div");
+            errLine.className = "fill-error-detail";
+            errLine.textContent = `• ${err.label || err.id}: ${err.reason}`;
+            fillStatus.appendChild(errLine);
+          }
+        }
+      }
+    } catch (e) {
+      fillStatus.className = "fill-status fill-error";
+      fillStatus.textContent = `Couldn't reach the tab — reload the job page tab and try again. (${e?.message || e})`;
+    }
+    fillBtn.disabled = false;
+    fillBtn.innerHTML = '<span class="fill-icon">✨</span> Fill again';
+  });
+  container.appendChild(fillBtn);
+  container.appendChild(fillStatus);
+
+  // Safety reminder.
+  const safety = document.createElement("div");
+  safety.className = "fill-safety";
+  safety.textContent = "🛡️ Never submits — you click Submit yourself.";
+  container.appendChild(safety);
+
+  if (cvCompany) {
+    const dlLink = panelLink(`${serverUrl}/api/cv-pdf?company=${encodeURIComponent(cvCompany)}`, "📄 Download tailored CV");
+    dlLink.className = "cv-download-link";
+    container.appendChild(dlLink);
+  }
 }
 
 // If the caller doesn't already know which tab a URL lives in, check whether
@@ -482,8 +599,112 @@ async function resolveTabIdForUrl(url) {
   }
 }
 
-async function runApplyDraft(url, tabId) {
+// ── tailored CV check ───────────────────────────────────────────────────
+// Before filling a form, check if a tailored CV exists for this company.
+// Uses /api/cv-pdf (HEAD) — 200 means a PDF exists, 404 means it doesn't.
+// Best-effort company extraction from the capture title when we don't have
+// a tracker row to look up.
+async function checkTailoredCv(company) {
+  if (!company) return { exists: false, company: "" };
+  try {
+    const r = await fetch(`${serverUrl}/api/cv-pdf?company=${encodeURIComponent(company)}`, { method: "HEAD" });
+    return { exists: r.ok, company };
+  } catch {
+    // Server unreachable — don't block the flow, just skip the check.
+    return { exists: true, company };
+  }
+}
+
+// Extract a best-effort company name from a page title.
+// ATS titles: "Role @ Company" (Ashby), "Role at Company" (Lever/Greenhouse).
+function companyFromTitle(title) {
+  const t = (title || "").trim();
+  if (!t) return "";
+  const at = t.match(/@\s*([^|@]+?)\s*$/);
+  if (at) return at[1].trim();
+  const atWord = t.match(/\bat\s+([A-Z][\w&.\- ]+?)\s*$/);
+  if (atWord) return atWord[1].trim();
+  // "Company — Role" or "Company - Role"
+  const dash = t.match(/^([^—–-]+?)\s*[—–-]\s*/);
+  if (dash && dash[1].length < 60) return dash[1].trim();
+  return "";
+}
+
+// Look up company from tracker via reportNum (server-side).
+async function lookupCompanyByReport(reportNum) {
+  if (!reportNum) return "";
+  try {
+    const r = await fetch(`${serverUrl}/api/report?n=${encodeURIComponent(reportNum)}`);
+    if (!r.ok) return "";
+    const data = await r.json();
+    return data?.app?.company || "";
+  } catch {
+    return "";
+  }
+}
+
+// Show a CV gate in the given container. Returns a promise that resolves to
+// true (proceed with fill) or false (user chose to generate CV first).
+function showCvGate(container, company, { reportNum, appN }) {
+  return new Promise((resolve) => {
+    const gate = document.createElement("div");
+    gate.className = "cv-gate";
+    gate.innerHTML = `
+      <div class="cv-gate-icon">📄</div>
+      <div class="cv-gate-title">No tailored resume found${company ? ` for ${company}` : ""}</div>
+      <div class="cv-gate-hint">For best results, generate a tailored CV first — it personalizes your form answers and attaches your resume automatically.</div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "cv-gate-actions";
+
+    if (reportNum) {
+      const genBtn = document.createElement("button");
+      genBtn.type = "button";
+      genBtn.className = "cv-gate-gen";
+      genBtn.textContent = "📄 Generate tailored CV first";
+      genBtn.addEventListener("click", () => {
+        gate.remove();
+        runPdf(reportNum, appN);
+        resolve(false);
+      });
+      actions.appendChild(genBtn);
+    }
+
+    const skipBtn = document.createElement("button");
+    skipBtn.type = "button";
+    skipBtn.className = "cv-gate-skip";
+    skipBtn.textContent = "Continue without CV →";
+    skipBtn.addEventListener("click", () => {
+      gate.remove();
+      resolve(true);
+    });
+    actions.appendChild(skipBtn);
+    gate.appendChild(actions);
+    container.appendChild(gate);
+  });
+}
+
+async function runApplyDraft(url, tabId, { reportNum, appN } = {}) {
   resetActionPanel();
+
+  // ── tailored CV gate ───────────────────────────────────────────────────
+  // Check if a tailored CV exists before opening the form.
+  let cvCompany = null;
+  const company = await lookupCompanyByReport(reportNum) || companyFromTitle(activeCapture?.title);
+  if (company) {
+    showActionBusy("Checking for tailored resume…");
+    const cv = await checkTailoredCv(company);
+    if (!cv.exists) {
+      els.actionPanelStatus.classList.add("hidden");
+      els.actionPanel.classList.remove("hidden");
+      const proceed = await showCvGate(els.actionPanelBody, company, { reportNum, appN });
+      if (!proceed) return; // user chose to generate CV first
+      resetActionPanel();
+    } else {
+      cvCompany = company;
+    }
+  }
+
   showActionBusy("Opening the form…");
   actionController = new AbortController();
   const resolvedTabId = tabId ?? (await resolveTabIdForUrl(url));
@@ -497,7 +718,7 @@ async function runApplyDraft(url, tabId) {
     onDone: (outcome) => {
       actionController = null;
       els.actionPanelStatus.classList.add("hidden");
-      renderApplyOutcome(els.actionPanelBody, url, outcome);
+      renderApplyOutcome(els.actionPanelBody, url, outcome, resolvedTabId, cvCompany);
     },
     onError: showActionError,
     onAborted: () => showActionError("Stopped."),
@@ -510,6 +731,20 @@ async function runApplyDraft(url, tabId) {
 // instead of the result-card's action panel since any of those can happen
 // with no evaluation (and no result-card) on screen at all.
 async function draftFormForUrl(url, tabId) {
+  // ── soft tailored CV check for the landing/chat flow ─────────────────
+  // Best-effort: extract company from the capture or page title.
+  let cvCompany = null;
+  const company = companyFromTitle(activeCapture?.title || "");
+  if (company) {
+    const cv = await checkTailoredCv(company);
+    if (!cv.exists) {
+      const div = addMessage("assistant", "");
+      div.innerHTML = `<strong>⚠️ No tailored resume found${company ? ` for ${company}` : ""}</strong><br><span style="font-size:11px;color:#6b7280">For best results, evaluate the posting first and generate a tailored CV. Continuing with your base CV…</span>`;
+    } else {
+      cvCompany = company;
+    }
+  }
+
   const div = addMessage("assistant", `Reading the form at ${url}…`);
   const controller = new AbortController();
   const resolvedTabId = tabId ?? (await resolveTabIdForUrl(url));
@@ -522,7 +757,7 @@ async function draftFormForUrl(url, tabId) {
     onStatus: (label) => { div.textContent = label; },
     onDone: (outcome) => {
       div.textContent = "";
-      renderApplyOutcome(div, url, outcome);
+      renderApplyOutcome(div, url, outcome, resolvedTabId, cvCompany);
       els.scrollArea.scrollTop = els.scrollArea.scrollHeight;
     },
     onError: (msg) => { div.textContent = `Error: ${msg}`; },
