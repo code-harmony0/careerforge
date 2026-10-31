@@ -27,6 +27,8 @@
 //
 // Wire in via a `job_boards:` entry with `provider: eures`.
 
+import { safeEncodeURIComponent } from './_safe-url.mjs';
+
 const SEARCH_URL = 'https://europa.eu/eures/api/jv-searchengine/public/jv-search/search';
 const REFERER = 'https://europa.eu/eures/portal/jv-se/search';
 const DETAILS_BASE = 'https://europa.eu/eures/portal/jv-se/jv-details/';
@@ -64,9 +66,9 @@ export function normalizeEuresJob(j, fallbackCompany) {
   const title = typeof j.title === 'string' ? j.title.trim() : '';
   if (!title) return null;
 
-  const id = typeof j.id === 'string' ? j.id.trim() : '';
-  if (!id) return null;
-  const url = `${DETAILS_BASE}${encodeURIComponent(id)}?lang=en`;
+  const encId = safeEncodeURIComponent(id);
+  if (!encId) return null;
+  const url = `${DETAILS_BASE}${encId}?lang=en`;
 
   const company =
     j.employer && typeof j.employer.name === 'string' && j.employer.name.trim()

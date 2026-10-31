@@ -6,11 +6,15 @@
 import { createServer } from 'node:http';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
-import { pass, fail, ROOT } from './helpers.mjs';
+import { pass, fail, ROOT, withLocalServerAs } from './helpers.mjs';
 
 console.log('\nShared User-Agent constants');
 
-const { DEFAULT_USER_AGENT, BROWSER_LIKE_USER_AGENT } = await import(pathToFileURL(join(ROOT, 'user-agent.mjs')).href);
+const {
+  DEFAULT_USER_AGENT,
+  BROWSER_LIKE_USER_AGENT,
+  MACOS_BROWSER_LIKE_USER_AGENT,
+} = await import(pathToFileURL(join(ROOT, 'user-agent.mjs')).href);
 const { fetchJson } = await import(pathToFileURL(join(ROOT, 'providers/_http.mjs')).href);
 
 // 1. Pinned to a literal, not derived from package.json — the exact
@@ -25,6 +29,10 @@ const EXPECTED_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebK
 if (BROWSER_LIKE_USER_AGENT === EXPECTED_BROWSER_UA) pass('BROWSER_LIKE_USER_AGENT matches the pinned literal');
 else fail(`BROWSER_LIKE_USER_AGENT drifted from the pinned literal: got ${BROWSER_LIKE_USER_AGENT}`);
 
+const EXPECTED_MACOS_BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+if (MACOS_BROWSER_LIKE_USER_AGENT === EXPECTED_MACOS_BROWSER_UA) pass('MACOS_BROWSER_LIKE_USER_AGENT matches the pinned literal');
+else fail(`MACOS_BROWSER_LIKE_USER_AGENT drifted from the pinned literal: got ${MACOS_BROWSER_LIKE_USER_AGENT}`);
+
 // 2. The header that actually goes out on the wire matches the constant —
 // checks 1 above only inspect the exported string in isolation, which
 // wouldn't catch it if _http.mjs's internal fetchWithTimeout (not exported,
@@ -38,10 +46,12 @@ else fail(`BROWSER_LIKE_USER_AGENT drifted from the pinned literal: got ${BROWSE
     res.end('{"ok":true}');
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  // The provider guard refuses a loopback destination, so the request goes to
+  // a public-looking origin and the transport is pointed at the local server.
+  const base = 'http://ua.example.test';
 
   try {
-    await fetchJson(base, { timeoutMs: 2_000 });
+    await withLocalServerAs(base, `http://127.0.0.1:${server.address().port}`, () => fetchJson(`${base}/`, { timeoutMs: 2_000 }));
   } finally {
     await new Promise((r) => server.close(r));
   }

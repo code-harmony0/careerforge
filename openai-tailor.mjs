@@ -19,7 +19,11 @@
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
+import { loadYaml } from './lib/yaml-document.mjs';
+import { validateLockedSections, sectionKey } from './generate-pdf.mjs';
+import { readLockedSections } from './theme-style.mjs';
+import { redactIfEnabled, restoreIfEnabled } from './utils/privacy-filter.mjs';
 
 try {
   const { config } = await import('dotenv');
@@ -27,6 +31,7 @@ try {
 } catch { /* dotenv optional */ }
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
+const DATA_ROOT = getCareerOpsRoot();
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -35,10 +40,10 @@ const PATHS = {
   shared:   join(ROOT, 'modes', '_shared.md'),
   writing:  join(ROOT, 'modes', '_writing.md'),
   pdfMode:  join(ROOT, 'modes', 'pdf.md'),
-  cv:       join(ROOT, 'cv.md'),
-  profile:  join(ROOT, 'config', 'profile.yml'),
+  cv:       join(DATA_ROOT, 'cv.md'),
+  profile:  getProfilePath(),
   template: join(ROOT, 'templates', 'cv-template.html'),
-  output:   join(ROOT, 'output'),
+  output:   join(DATA_ROOT, 'output'),
 };
 
 // ---------------------------------------------------------------------------
@@ -114,18 +119,8 @@ if (!existsSync(reportPath)) {
 const jdText = readFileSync(jdPath, 'utf-8').trim();
 const reportText = readFileSync(reportPath, 'utf-8').trim();
 
-// Attempt to parse company slug and candidate name
+// The report filename identifies the application being tailored.
 const reportFilename = basename(reportPath);
-const match = reportFilename.match(/^\d+-([a-z0-9-]+)-\d{4}-\d{2}-\d{2}\.md$/);
-const companySlug = match ? match[1] : 'unknown-company';
-
-// Extract role from report header (e.g., "# Evaluation: Company - Role Title")
-let roleSlug = 'role';
-const roleMatch = reportText.match(/^#\s+Evaluation:\s+[^-]+\s+-\s+(.+?)$/m);
-if (roleMatch && roleMatch[1]) {
-  roleSlug = roleMatch[1]
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
 
 // ---------------------------------------------------------------------------
 // Endpoint + security guard.
@@ -188,8 +183,11 @@ const sharedContext  = readFile(PATHS.shared, 'modes/_shared.md', false);
 // engines that read the eval-core _shared.md alone.
 const writingContext = readFile(PATHS.writing, 'modes/_writing.md', false);
 const pdfModeLogic   = readFile(PATHS.pdfMode, 'modes/pdf.md', false);
-const cvContent      = readFile(PATHS.cv, 'cv.md', true);
-const profileContent = readFile(PATHS.profile, 'config/profile.yml', true);
+// Opt-in privacy filter (privacy.redact_contact_info in config/profile.yml):
+// keep name/contact details out of the prompt sent to the model.
+const profileYmlRaw  = readFile(PATHS.profile, 'config/profile.yml', true);
+const cvContent      = redactIfEnabled(readFile(PATHS.cv, 'cv.md', true), profileYmlRaw);
+const profileContent = redactIfEnabled(profileYmlRaw, profileYmlRaw);
 const templateHtml   = readFile(PATHS.template, 'templates/cv-template.html', true);
 
 // ---------------------------------------------------------------------------
@@ -310,6 +308,10 @@ try {
 // Clean up markdown block wrapping if the LLM adds it despite instructions
 tailoredHtml = tailoredHtml.replace(/^\s*```(html)?\s*/i, '').replace(/\s*```\s*$/, '');
 
+// The model only saw placeholders when redaction is on; put the real name and
+// contact details back so the tailored CV never ships with "Candidate Name".
+tailoredHtml = restoreIfEnabled(tailoredHtml, profileYmlRaw);
+
 // ---------------------------------------------------------------------------
 // Save tailored HTML
 // ---------------------------------------------------------------------------
@@ -320,7 +322,7 @@ try {
 
   let candidateName = 'candidate';
   try {
-    const profile = yaml.load(profileContent);
+    const profile = loadYaml(profileYmlRaw);
     if (profile && profile.name) {
       candidateName = profile.name;
     }
@@ -330,18 +332,28 @@ try {
   candidateName = candidateName
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-  const filename = `cv-${candidateName}-${companySlug}.html`;
+  // Reports identify applications; one employer can have several requisitions
+  // with the same title. Re-tailoring one report may replace its own artifact.
+  const artifactStem = `cv-${candidateName}-${reportFilename.replace(/\.md$/i, '')}`;
+  const filename = `${artifactStem}.html`;
   const htmlPath = join(PATHS.output, filename);
+
+  const lockedKeys = readLockedSections(PATHS.profile, sectionKey);
+  const cvMarkdown = readFileSync(PATHS.cv, 'utf-8');
+  validateLockedSections(tailoredHtml, cvMarkdown, lockedKeys);
 
   writeFileSync(htmlPath, tailoredHtml, 'utf-8');
   console.log(`\n✅  Tailored HTML saved: ${htmlPath}`);
 
   // Print next steps
-  const pdfFilename = `cv-${candidateName}-${companySlug}-${roleSlug}-${new Date().toISOString().split('T')[0]}.pdf`;
+  const pdfFilename = `${artifactStem}.pdf`;
   const reportNumMatch = reportFilename.match(/^(\d+)-/);
   const reportNum = reportNumMatch ? reportNumMatch[1] : '001';
+  const pdfPaths = [`output/${filename}`, `output/${pdfFilename}`]
+    .map(path => /^[A-Za-z0-9._@+/-]+$/.test(path) ? path : `'${path.replace(/'/g, "'\\''")}'`)
+    .join(' ');
 
-  console.log(`\n📄  Next step (generate PDF):\n    node generate-pdf.mjs output/${filename} output/${pdfFilename} --format=letter --report=${reportNum}\n`);
+  console.log(`\n📄  Next step (generate PDF):\n    node generate-pdf.mjs ${pdfPaths} --format=letter --report=${reportNum}\n`);
 
 } catch (err) {
   console.warn(`⚠️   Could not save HTML: ${err.message}`);

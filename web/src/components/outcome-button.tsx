@@ -66,14 +66,14 @@ export function OutcomeButton({ n }: { n: string }) {
       <button
         type="button"
         onClick={() => setShowMenu(!showMenu)}
-        className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]"
+        className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand-text max-sm:min-h-[44px]"
         title="Record what actually happened — updates the tracker and archives the submitted artifacts"
       >
         <ClipboardCheck className="size-3.5" /> Record outcome
       </button>
 
       {saved && (
-        <span className="absolute -right-1 top-full mt-1 animate-terminal-popup inline-flex items-center gap-1 text-xs font-medium text-brand">
+        <span className="absolute -right-1 top-full mt-1 animate-terminal-popup inline-flex items-center gap-1 text-xs font-medium text-brand-text">
           <Check className="size-3" /> recorded
         </span>
       )}

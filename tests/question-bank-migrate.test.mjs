@@ -20,7 +20,7 @@ function makeSandbox() {
   const dir = mkdtempSync(join(tmpdir(), 'qb-migrate-'));
   mkdirSync(join(dir, 'interview-prep'), { recursive: true });
   for (const f of ['question-bank.mjs', 'tracker-utils.mjs', 'tracker-parse.mjs',
-    'tracker-aliases.json', 'pipeline-lock.mjs', 'package.json']) {
+    'tracker-aliases.json', 'pipeline-lock.mjs', 'path-resolver.mjs', 'package.json']) {
     cpSync(join(ROOT, f), join(dir, f));
   }
   cpSync(join(ROOT, 'lib'), join(dir, 'lib'), { recursive: true });

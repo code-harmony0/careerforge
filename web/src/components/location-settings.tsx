@@ -116,7 +116,7 @@ function MultiSelectDropdown({
                 type="checkbox"
                 checked={value.includes(opt)}
                 onChange={() => toggle(opt)}
-                className="size-4 shrink-0 rounded border-border bg-surface text-brand focus:ring-brand accent-brand"
+                className="size-4 shrink-0 rounded border-border bg-surface text-brand-text focus:ring-brand accent-brand"
               />
               {opt}
             </label>

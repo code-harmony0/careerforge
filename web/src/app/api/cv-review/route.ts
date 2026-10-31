@@ -68,7 +68,7 @@ export async function POST(req: Request) {
   const result = await renderAndMarkPdf({
     spawnFn: spawn,
     execPath: process.execPath,
-    root,
+    coreRoot: root,
     pdfPaths: paths.paths,
     format,
     reportNum,

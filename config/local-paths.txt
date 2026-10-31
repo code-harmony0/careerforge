@@ -1,0 +1,7 @@
+# Fork-owned files preserved across upstream updates
+cv-thumb.mjs
+existing-report.mjs
+extension/
+lib/question-bank.mjs
+question-bank.mjs
+scripts/agy-followups.mjs

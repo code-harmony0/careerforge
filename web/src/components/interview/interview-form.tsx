@@ -482,7 +482,7 @@ function AlreadySaved({ slug, onOpen }: { slug: string | null; onOpen?: (slug: s
 /** One numbered step in link mode's evaluate → prep chain. */
 function ChainStep({ n, label, status }: { n: number; label: string; status: "running" | "done" | "error" | "pending" }) {
   const tone =
-    status === "done" ? "text-emerald-500" : status === "error" ? "text-red-400" : status === "running" ? "text-brand" : "text-faint";
+    status === "done" ? "text-emerald-500" : status === "error" ? "text-red-400" : status === "running" ? "text-brand-text" : "text-faint";
   const mark = status === "done" ? "✓" : status === "error" ? "✕" : String(n);
   return (
     <li className="flex items-center gap-2">
@@ -490,7 +490,7 @@ function ChainStep({ n, label, status }: { n: number; label: string; status: "ru
         {mark}
       </span>
       <span className={status === "pending" ? "text-faint" : "text-muted"}>{label}</span>
-      {status === "running" && <Loader2 className="size-3 animate-spin text-brand" />}
+      {status === "running" && <Loader2 className="size-3 animate-spin text-brand-text" />}
     </li>
   );
 }
@@ -526,7 +526,7 @@ function ResultPanel({
     return (
       <div className="co-print-hide max-w-2xl rounded-xl border border-border bg-surface/50 p-4">
         <p className="flex items-center gap-2 text-sm font-medium">
-          <Loader2 className="size-4 animate-spin text-brand" />
+          <Loader2 className="size-4 animate-spin text-brand-text" />
           Writing your {kindLabel.toLowerCase()}…
         </p>
         <p className="mt-1 text-xs text-faint">{job.subtitle}</p>

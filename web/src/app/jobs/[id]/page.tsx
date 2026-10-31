@@ -25,7 +25,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   if (!job) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-10">
-        <Link href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand">
+        <Link href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand-text">
           <ArrowLeft className="size-4" /> Pipeline
         </Link>
         <p className="mt-8 text-sm text-muted">
@@ -37,7 +37,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
-      <Link href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand">
+      <Link href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand-text">
         <ArrowLeft className="size-4" /> Pipeline
       </Link>
 
@@ -46,7 +46,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
         <div className="relative z-10">
           <p className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-faint">
             {job.status === "running" ? (
-              <><Loader2 className="size-3 animate-spin text-brand" /> working</>
+              <><Loader2 className="size-3 animate-spin text-brand-text" /> working</>
             ) : job.status === "done" ? (
               <><Check className="size-3 text-emerald-500" /> done</>
             ) : (
@@ -66,7 +66,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                   if (newId) router.push(`/jobs/${newId}`);
                 }}
                 title="Run this again to check for anything new — the result above stays as-is until you do"
-                className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand-text max-sm:min-h-[44px]"
               >
                 <RotateCcw className="size-3.5" /> Check again
               </button>
@@ -78,9 +78,9 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
               {job.result.summary && <span className="text-sm text-muted">{job.result.summary}</span>}
             </div>
           )}
-          {job.kind === "evaluate" && job.status === "done" && job.reportNum && (
+          {job.kind === "evaluate" && job.status === "done" && (job.reportNum || job.reportN) && (
             <Link
-              href={`/pipeline/${job.reportNum}`}
+              href={`/pipeline/${job.reportNum || job.reportN}`}
               className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-medium text-brand-foreground shadow-sm transition-colors hover:bg-brand-200"
             >
               <FileText className="size-4" /> View full report
@@ -93,7 +93,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
         {job.steps.map((s, i) => (
           <li key={i} className="flex items-start gap-2.5 text-sm">
             {s.kind === "tool" ? (
-              <Wrench className="mt-0.5 size-3.5 shrink-0 text-brand" />
+              <Wrench className="mt-0.5 size-3.5 shrink-0 text-brand-text" />
             ) : (
               <CircleDot className="mt-0.5 size-3.5 shrink-0 text-faint" />
             )}
@@ -104,7 +104,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
         ))}
         {job.status === "running" && (
           <li className="flex items-center gap-2.5 text-sm text-muted">
-            <Loader2 className="size-3.5 animate-spin text-brand" /> thinking…
+            <Loader2 className="size-3.5 animate-spin text-brand-text" /> thinking…
           </li>
         )}
       </ol>

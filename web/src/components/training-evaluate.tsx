@@ -31,7 +31,7 @@ export function TrainingEvaluate() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-medium text-faint transition-colors hover:text-brand"
+        className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-medium text-faint transition-colors hover:text-brand-text"
       >
         <GraduationCap className="size-3.5" /> Should I take a course or cert?
       </button>
@@ -41,7 +41,7 @@ export function TrainingEvaluate() {
   return (
     <div className="mt-2.5 max-w-xl">
       <div className="flex items-center gap-2 rounded-full border border-border bg-surface/70 py-1.5 pl-4 pr-1.5 shadow-sm focus-within:border-brand/50">
-        <GraduationCap className="size-4 shrink-0 text-brand/70" />
+        <GraduationCap className="size-4 shrink-0 text-brand-text/70" />
         <input
           autoFocus
           value={course}

@@ -62,7 +62,7 @@ export function SaveContactForm({
 
   if (saved) {
     return (
-      <div className="mt-6 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
+      <div className="mt-6 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-400">
         <Check className="mt-0.5 size-4 shrink-0" />
         <span>
           Saved to your contacts{message.trim() ? " — message included, so it's here next time you need it, not just in this job's history" : ""} — exportable anytime with <code className="text-xs">node contacts.mjs --vcf</code>.

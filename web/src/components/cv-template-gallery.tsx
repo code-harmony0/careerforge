@@ -139,7 +139,7 @@ export function CvTemplateGallery() {
             type="button"
             onClick={generate}
             disabled={running}
-            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-60 max-sm:min-h-[44px]"
+            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand-text disabled:opacity-60 max-sm:min-h-[44px]"
           >
             {running ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
             {running ? "Rendering…" : anyPreview ? "Regenerate" : "Generate previews"}
@@ -149,7 +149,7 @@ export function CvTemplateGallery() {
       </div>
 
       {running && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-brand/30 bg-brand-soft px-3 py-2 text-xs text-brand">
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-brand/30 bg-brand-soft px-3 py-2 text-xs text-brand-text">
           <Loader2 className="size-3.5 shrink-0 animate-spin" />
           Reading your CV, then rendering it into {info.templates.length} templates. This takes a few minutes — you can
           leave this page and come back.
@@ -157,7 +157,7 @@ export function CvTemplateGallery() {
       )}
 
       {anyStale && !running && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-400">
           <AlertTriangle className="size-3.5 shrink-0" />
           Your CV changed since these were rendered — regenerate to see the current version.
         </div>
@@ -234,7 +234,7 @@ export function CvTemplateGallery() {
                     type="button"
                     onClick={() => setZoomed(t.name)}
                     title="Preview full size"
-                    className="text-faint transition-colors hover:text-brand"
+                    className="text-faint transition-colors hover:text-brand-text"
                   >
                     <Maximize2 className="size-3.5" />
                   </button>

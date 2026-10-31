@@ -91,13 +91,13 @@ export function AiActionsMenu({ n, company }: { n: string; company: string }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]"
+        className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand-text max-sm:min-h-[44px]"
         title="Outreach, research, cover letter & email drafts for this role"
       >
-        {runningCount > 0 ? <Loader2 className="size-3.5 animate-spin text-brand" /> : <Sparkles className="size-3.5" />}
+        {runningCount > 0 ? <Loader2 className="size-3.5 animate-spin text-brand-text" /> : <Sparkles className="size-3.5" />}
         AI actions
         {doneCount > 0 && runningCount === 0 && (
-          <span className="inline-flex size-4 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+          <span className="inline-flex size-4 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-semibold text-emerald-800 dark:text-emerald-400">
             {doneCount}
           </span>
         )}
@@ -122,7 +122,7 @@ export function AiActionsMenu({ n, company }: { n: string; company: string }) {
                     onClick={() => setOpen(false)}
                     className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-surface-hover"
                   >
-                    <Loader2 className="size-4 shrink-0 animate-spin text-brand" />
+                    <Loader2 className="size-4 shrink-0 animate-spin text-brand-text" />
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium text-foreground">{action.label}</span>
                       <span className="block text-xs text-faint">Working…</span>
@@ -153,7 +153,7 @@ export function AiActionsMenu({ n, company }: { n: string; company: string }) {
                         if (id) router.push(`/jobs/${id}`);
                       }}
                       title="Check again — re-runs this, doesn't touch the saved result"
-                      className="mr-1.5 inline-flex shrink-0 items-center justify-center rounded-full p-1.5 text-faint transition-colors hover:text-brand max-sm:min-h-[44px] max-sm:min-w-[44px]"
+                      className="mr-1.5 inline-flex shrink-0 items-center justify-center rounded-full p-1.5 text-faint transition-colors hover:text-brand-text max-sm:min-h-[44px] max-sm:min-w-[44px]"
                     >
                       <RotateCcw className="size-3.5" />
                     </button>

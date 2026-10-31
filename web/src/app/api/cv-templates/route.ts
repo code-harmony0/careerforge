@@ -3,6 +3,8 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import * as yaml from "js-yaml";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
+import { getProfilePath } from "@/lib/core/profile-path.mjs";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 import { cvHash, previewState, readManifest, isGenerating } from "@/lib/cv-previews.mjs";
 
@@ -16,12 +18,13 @@ export const dynamic = "force-dynamic";
 // first time a template gains a field.
 type Template = { name: string; displayName: string };
 
-function listTemplates(root: string): Promise<Template[]> {
+function listTemplates(_root: string): Promise<Template[]> {
+  const codeRoot = resolveCodeRoot(process.cwd(), process.env);
   return new Promise((resolve) => {
     execFile(
       process.execPath,
       [rootScript("cv-templates"), "list", "cv"],
-      { cwd: root, timeout: 10_000 },
+      { cwd: codeRoot, timeout: 10_000, windowsHide: true },
       (err, stdout) => {
         if (err) return resolve([]);
         try {
@@ -36,7 +39,7 @@ function listTemplates(root: string): Promise<Template[]> {
 }
 
 function profilePath(root: string) {
-  return path.join(root, "config", "profile.yml");
+  return getProfilePath(root);
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {

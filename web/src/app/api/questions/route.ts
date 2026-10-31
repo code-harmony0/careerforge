@@ -13,6 +13,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
 import { parseQuestionBank, facets } from "@/lib/question-bank-read.mjs";
 
 // The parser is header-driven, so a row is whatever columns the file declared.
@@ -80,12 +81,12 @@ export async function PATCH(req: Request) {
   if (!id || !ID_RE.test(id)) return Response.json({ error: "bad id" }, { status: 400 });
   if (!status || !STATUSES.has(status)) return Response.json({ error: "bad status" }, { status: 400 });
 
-  const root = careerOpsRoot();
+  const codeRoot = resolveCodeRoot(process.cwd(), process.env);
   const result = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
     execFile(
       process.execPath,
-      [path.join(root, "question-bank.mjs"), "status", id, status],
-      { cwd: root, timeout: WRITE_TIMEOUT_MS },
+      [path.join(codeRoot, "question-bank.mjs"), "status", id, status],
+      { cwd: codeRoot, timeout: WRITE_TIMEOUT_MS, windowsHide: true },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: number }).code === "number"
           ? ((err as unknown as { code: number }).code)

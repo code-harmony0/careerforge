@@ -59,7 +59,7 @@ export function CvDecisionsPanel({
   return (
     <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
       <div className="flex items-start gap-2">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-800 dark:text-amber-400" />
         <div>
           <p className="text-sm font-medium text-foreground">
             {pending.items.length} thing{pending.items.length === 1 ? "" : "s"} on this CV{" "}

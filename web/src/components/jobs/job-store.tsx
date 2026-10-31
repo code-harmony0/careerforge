@@ -1,8 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { scoreTone } from "@/lib/format";
-import { readSavedCliId, resolveCliId } from "@/lib/saved-cli";
+import { resolveCliId } from "@/lib/saved-cli";
+import { createWorkerFeedback } from "@/lib/worker-feedback.mjs";
+import { readJobStream } from "@/lib/job-stream.mjs";
+import { createJobsPersister } from "@/lib/jobs-persist.mjs";
 
 export type JobStep = { kind: "tool" | "status"; label: string; ts: number };
 export type JobResult = { score: number | null; summary: string; tone: "good" | "warn" | "bad" | "muted" };
@@ -14,6 +17,7 @@ export type Job = {
   page?: string; // route the job was launched from / refers to
   input?: string; // the URL/posting it processed (links inbox rows to their worker)
   kind?: string;
+  evaluationSections?: string[];
   batchId?: string; // groups jobs fired together (e.g. "evaluate all Anthropic")
   status: "running" | "done" | "error";
   steps: JobStep[];
@@ -24,6 +28,7 @@ export type Job = {
    *  the job page can link straight to it (the streamed text is often just
    *  the terse VERDICT line — the real report lives at /pipeline/{reportNum}). */
   reportNum?: string;
+  reportN?: number | null;
   /** Set when a pdf run stopped BEFORE rendering to ask about competencies
    *  cv.md does not support (modes/pdf.md step 14a's headless equivalent).
    *  No PDF exists yet — /api/cv-review renders one once these are resolved. */
@@ -32,7 +37,7 @@ export type Job = {
   endedAt?: number;
 };
 
-type StartOpts = { title: string; subtitle?: string; kind: string; input: string; page?: string; batchId?: string };
+type StartOpts = { title: string; subtitle?: string; kind: string; input: string; page?: string; batchId?: string; brief?: Record<string, string>; evaluationSections?: string[] };
 
 type Ctx = {
   jobs: Job[];
@@ -66,6 +71,13 @@ function parseVerdict(text: string): JobResult {
 
 export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [announcement, setAnnouncement] = useState("");
+  const feedback = useRef<ReturnType<typeof createWorkerFeedback> | null>(null);
+  useEffect(() => {
+    const owner = createWorkerFeedback(setAnnouncement);
+    feedback.current = owner;
+    return () => { owner.dispose(); feedback.current = null; };
+  }, []);
   const seq = useRef(0);
   const loaded = useRef(false);
 
@@ -84,14 +96,34 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     loaded.current = true;
   }, []);
 
-  // persist
+  // persist. Every streamed chunk replaces `jobs`, so writes go through the
+  // persister: at once when nothing runs, at most once a second while a job
+  // streams, and flushed when the page is hidden or the provider unmounts.
+  const persister = useRef<ReturnType<typeof createJobsPersister<Job>> | null>(null);
+  if (persister.current === null) {
+    persister.current = createJobsPersister<Job>({
+      write: (list) => {
+        try {
+          localStorage.setItem(JOBS_KEY, JSON.stringify(list.slice(0, 40)));
+        } catch {
+          /* quota */
+        }
+      },
+      isActive: (list) => list.some((j) => j.status === "running"),
+    });
+  }
+  useEffect(() => {
+    const owner = persister.current;
+    const flush = () => owner?.flush();
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
   useEffect(() => {
     if (!loaded.current) return;
-    try {
-      localStorage.setItem(JOBS_KEY, JSON.stringify(jobs.slice(0, 40)));
-    } catch {
-      /* quota */
-    }
+    persister.current?.save(jobs);
   }, [jobs]);
 
   const patch = useCallback((id: string, fn: (j: Job) => Job) => {
@@ -108,6 +140,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         page: opts.page,
         input: opts.input,
         kind: opts.kind,
+        evaluationSections: opts.evaluationSections ? [...opts.evaluationSections] : undefined,
         batchId: opts.batchId,
         status: "running",
         steps: [{ kind: "status", label: "Starting…", ts: Date.now() }],
@@ -116,9 +149,26 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       };
       setJobs((js) => [job, ...js]);
 
+      // Declared before resolveCliId() so its stale-CLI notice lands in the log
+      // sent to /api/runs/save, not only in the live job.
+      const steps: JobStep[] = [];
       (async () => {
-        const cliId = readSavedCliId() || (await resolveCliId());
+        // resolveCliId() validates the saved id against what is installed; a
+        // bare readSavedCliId() here would short-circuit that check and launch
+        // a run against an uninstalled CLI (#4012).
+        // A stale saved id is replaced silently otherwise — name the switch in
+        // the job log so a transient "not installed" can't rewrite the user's
+        // choice without a record.
+        const cliId = await resolveCliId((stale, replacement) => {
+          const label = replacement
+            ? `Saved CLI '${stale}' is not installed — using '${replacement}'`
+            : `Saved CLI '${stale}' is not installed`;
+          const step: JobStep = { kind: "status", label, ts: Date.now() };
+          steps.push(step);
+          patch(id, (j) => ({ ...j, steps: [...j.steps, step] }));
+        });
         if (!cliId) {
+          feedback.current?.push({ ...job, status: "error" });
           patch(id, (j) => ({
             ...j,
             status: "error",
@@ -132,8 +182,13 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         let doneTokens = 0; // per-run token cost, forwarded on the done event (#6)
         let doneCostUsd: number | null = null;
         let doneReportNum: string | undefined;
+        let doneReportN: number | null = null;
         const steps: JobStep[] = [];
+        let finished = false;
         const finish = (status: "done" | "error", lastLabel?: string) => {
+          if (finished) return;
+          finished = true;
+          feedback.current?.push({ ...job, status });
           const result = status === "done" ? parseVerdict(verdictLine || text) : undefined;
           const cost = status === "done" && doneTokens > 0 ? { tokens: doneTokens, usd: doneCostUsd ?? undefined } : undefined;
           patch(id, (j) => ({
@@ -142,6 +197,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
             result,
             cost,
             reportNum: status === "done" ? doneReportNum : j.reportNum,
+            reportN: doneReportN,
             endedAt: Date.now(),
             steps: lastLabel ? [...j.steps, { kind: "status", label: lastLabel, ts: Date.now() }] : j.steps,
           }));
@@ -164,62 +220,42 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           const res = await fetch("/api/run", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId }),
+            body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId, brief: opts.brief, evaluationSections: opts.evaluationSections }),
           });
           if (!res.ok || !res.body) {
             const e = await res.json().catch(() => ({}));
             finish("error", e.error || "Failed to start");
             return;
           }
-          const reader = res.body.getReader();
-          const dec = new TextDecoder();
-          let buf = "";
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += dec.decode(value, { stream: true });
-            let nl: number;
-            while ((nl = buf.indexOf("\n")) !== -1) {
-              const line = buf.slice(0, nl).trim();
-              buf = buf.slice(nl + 1);
-              if (!line) continue;
-              try {
-                const ev = JSON.parse(line);
-                if (ev.type === "tool") {
-                  steps.push({ kind: "tool", label: ev.name, ts: Date.now() });
-                  patch(id, (j) => ({ ...j, steps: [...j.steps, { kind: "tool", label: ev.name, ts: Date.now() }] }));
-                } else if (ev.type === "status") {
-                  steps.push({ kind: "status", label: ev.label, ts: Date.now() });
-                  patch(id, (j) => ({ ...j, steps: [...j.steps, { kind: "status", label: ev.label, ts: Date.now() }] }));
-                } else if (ev.type === "text") {
-                  const full = text + ev.text;
-                  const vm = full.match(/VERDICT:[^\n]*/i);
-                  if (vm) verdictLine = vm[0];
-                  text = full.slice(-8000);
-                  patch(id, (j) => ({ ...j, text }));
-                } else if (ev.type === "decisions") {
-                  // Emitted INSTEAD of a render, so it is stored on the job
-                  // rather than pushed as a step: the job page turns it into a
-                  // per-item question, and a "done" that follows must not be
-                  // presented as a finished CV.
-                  const pending = { reportNum: String(ev.reportNum ?? ""), format: String(ev.format ?? "letter"), items: Array.isArray(ev.items) ? ev.items.map(String) : [] };
-                  if (pending.items.length) patch(id, (j) => ({ ...j, pendingDecisions: pending }));
-                } else if (ev.type === "done") {
-                  // finish happens on stream-close; capture the per-run cost (and,
-                  // for evaluate, the report number) it carries
-                  if (typeof ev.tokens === "number") doneTokens = ev.tokens;
-                  if (typeof ev.costUsd === "number") doneCostUsd = ev.costUsd;
-                  if (typeof ev.reportNum === "string") doneReportNum = ev.reportNum;
-                } else if (ev.type === "error") {
-                  finish("error", ev.msg || "Error");
-                  return;
-                }
-              } catch {
-                /* skip */
-              }
+          const completion = await readJobStream(res.body, (ev: any) => {
+            if (ev.type === "tool") {
+              steps.push({ kind: "tool", label: ev.name, ts: Date.now() });
+              patch(id, (j) => ({ ...j, steps: [...j.steps, { kind: "tool", label: ev.name, ts: Date.now() }] }));
+            } else if (ev.type === "status") {
+              steps.push({ kind: "status", label: ev.label, ts: Date.now() });
+              patch(id, (j) => ({ ...j, steps: [...j.steps, { kind: "status", label: ev.label, ts: Date.now() }] }));
+            } else if (ev.type === "text") {
+              const full = text + ev.text;
+              const vm = full.match(/VERDICT:[^\n]*/i);
+              if (vm) verdictLine = vm[0];
+              text = full.slice(-8000);
+              patch(id, (j) => ({ ...j, text }));
+            } else if (ev.type === "decisions") {
+              const pending = { reportNum: String(ev.reportNum ?? ""), format: String(ev.format ?? "letter"), items: Array.isArray(ev.items) ? ev.items.map(String) : [] };
+              if (pending.items.length) patch(id, (j) => ({ ...j, pendingDecisions: pending }));
             }
+          });
+          if (completion.status === "error") {
+            finish("error", completion.message);
+            return;
           }
+          doneTokens = completion.tokens ?? 0;
+          doneCostUsd = completion.costUsd ?? null;
+          doneReportN = typeof completion.reportN === "number" ? completion.reportN : null;
+          if (typeof (completion as any).reportNum === "string") doneReportNum = (completion as any).reportNum;
+          else if (doneReportN != null) doneReportNum = String(doneReportN);
           finish("done", "Done");
+
         } catch {
           finish("error", "Connection error");
         }
@@ -233,5 +269,14 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   const removeJob = useCallback((id: string) => setJobs((js) => js.filter((j) => j.id !== id)), []);
   const clearFinished = useCallback(() => setJobs((js) => js.filter((j) => j.status === "running")), []);
 
-  return <JobsContext.Provider value={{ jobs, startJob, removeJob, clearFinished }}>{children}</JobsContext.Provider>;
+  // A new object only when the list or an action changes, not on every render
+  // of this provider (the screen-reader announcement re-renders it too).
+  const value = useMemo(() => ({ jobs, startJob, removeJob, clearFinished }), [jobs, startJob, removeJob, clearFinished]);
+
+  return (
+    <JobsContext.Provider value={value}>
+      {children}
+      <div role="status" aria-label="Worker task status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</div>
+    </JobsContext.Provider>
+  );
 }

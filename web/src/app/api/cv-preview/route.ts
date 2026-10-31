@@ -4,8 +4,10 @@ import { execFile } from "node:child_process";
 import { NextRequest } from "next/server";
 import { resolveCli } from "@/lib/clis";
 import { spawnHeadlessCli } from "@/lib/spawn-cli.mjs";
+import { CAPS } from "@/lib/worker-capabilities.mjs";
 import { claudeCliArgs } from "@/lib/claude-invocation.mjs";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
 import { parseCvPayloadEnvelope, PAYLOAD_ENVELOPE_INSTRUCTION } from "@/lib/cv-payload-envelope.mjs";
 import {
   previewDir,
@@ -57,20 +59,22 @@ function run(file: string, args: string[], cwd: string, timeout: number): Promis
   });
 }
 
-function templatePath(root: string, name: string): Promise<string | null> {
+function templatePath(_root: string, name: string): Promise<string | null> {
+  const codeRoot = resolveCodeRoot(process.cwd(), process.env);
   return new Promise((resolve) => {
     execFile(
       process.execPath,
       [rootScript("cv-templates"), "resolve", "cv", name],
-      { cwd: root, timeout: 10_000 },
+      { cwd: codeRoot, timeout: 10_000, windowsHide: true },
       (err, stdout) => resolve(err ? null : stdout.trim() || null),
     );
   });
 }
 
-function listTemplateNames(root: string): Promise<string[]> {
+function listTemplateNames(_root: string): Promise<string[]> {
+  const codeRoot = resolveCodeRoot(process.cwd(), process.env);
   return new Promise((resolve) => {
-    execFile(process.execPath, [rootScript("cv-templates"), "list", "cv"], { cwd: root, timeout: 10_000 }, (err, stdout) => {
+    execFile(process.execPath, [rootScript("cv-templates"), "list", "cv"], { cwd: codeRoot, timeout: 10_000, windowsHide: true }, (err, stdout) => {
       if (err) return resolve([]);
       try {
         const parsed = JSON.parse(stdout);
@@ -137,7 +141,8 @@ export async function POST(req: Request) {
     const { spec, binPath } = resolved;
     const isClaude = body.cliId === "claude";
     const args = isClaude ? claudeCliArgs({ kind: "cv-preview", prompt }) : spec.args(prompt);
-    const child = spawnHeadlessCli(binPath, args, { cwd: root, env: process.env });
+    const codeRoot = resolveCodeRoot(process.cwd(), process.env);
+    const child = spawnHeadlessCli(binPath, args, { cwd: codeRoot, env: process.env }, { cliId: spec.id, capabilities: CAPS.localReadOnly });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
 

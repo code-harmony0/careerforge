@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
 import { isTrackerWriting } from "@/lib/core/run-registry";
 
 export const runtime = "nodejs";
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
       let err = "";
       let child;
       try {
-        child = spawn(process.execPath, args, { cwd: careerOpsRoot(), env: process.env });
+        child = spawn(process.execPath, args, { cwd: resolveCodeRoot(process.cwd(), process.env), env: process.env, windowsHide: true });
       } catch (e) {
         resolve({ code: 1, out: "", err: e instanceof Error ? e.message : "failed to start outcome.mjs" });
         return;

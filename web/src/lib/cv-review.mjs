@@ -16,6 +16,7 @@
  */
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolveCodeRoot } from "./core/code-root.mjs";
 
 /**
  * Load the core's fact verifier and return a SYNCHRONOUS competency checker.
@@ -33,12 +34,13 @@ import { pathToFileURL } from "node:url";
  * than skipping a check.
  *
  * @param {string} root - careerOpsRoot().
+ * @param {string} [codeRoot] - resolveCodeRoot().
  * @returns {Promise<(html: string) => string[]>}
  */
-export async function loadCompetencyChecker(root) {
+export async function loadCompetencyChecker(root, codeRoot = resolveCodeRoot(process.cwd(), process.env)) {
   let verifyFacts;
   try {
-    ({ verifyFacts } = await import(pathToFileURL(path.join(root, "verify-cv-facts.mjs")).href));
+    ({ verifyFacts } = await import(pathToFileURL(path.join(codeRoot, "verify-cv-facts.mjs")).href));
   } catch {
     return () => [];
   }
