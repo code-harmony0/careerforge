@@ -108,6 +108,9 @@ function startEvaluate(capture) {
     serverUrl,
     cliId,
     url: capture.url,
+    // The tab is already rendered and often login-walled; send its text so the
+    // server never has to (and can't) re-fetch it.
+    jdText: capture.text,
     signal: evalController.signal,
     onStatus: (label) => {
       els.statusText.textContent = label;

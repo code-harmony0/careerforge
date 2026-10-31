@@ -20,13 +20,13 @@ import { parseVerdict } from "./verdict.js";
 // ReadableStream, whose cancel() (web/src/app/api/run/route.ts) kills the
 // underlying CLI child process — so Stop actually stops the work, not just
 // the UI.
-export async function runEvaluate({ serverUrl, cliId, url, signal, onStatus, onDone, onError, onAborted }) {
+export async function runEvaluate({ serverUrl, cliId, url, jdText, signal, onStatus, onDone, onError, onAborted }) {
   let res;
   try {
     res = await fetch(`${serverUrl}/api/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "evaluate", input: url, cliId }),
+      body: JSON.stringify({ kind: "evaluate", input: url, cliId, jdText }),
       signal,
     });
   } catch (e) {

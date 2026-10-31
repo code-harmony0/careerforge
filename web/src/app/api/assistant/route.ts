@@ -111,7 +111,9 @@ export async function POST(req: Request) {
   const imageLine = imagePath
     ? `\n\nThe user attached an image with this message. Read it FIRST with the Read tool at this exact path before responding: ${imagePath}`
     : "";
-  const prompt = `${SYSTEM_PREAMBLE}${setupLine}${memoryLine}${pageLine}${imageLine}\n\n--- Conversation ---\n${convo}\nUser: ${message}\nAssistant:`;
+  // agy starts in $HOME regardless of spawn cwd and otherwise `find`s the repo (~40s).
+  const rootLine = `\n\nYour working directory is ${careerOpsRoot()} — resolve relative paths against it and do not search for the project. Only read files if the question truly needs them; answer simple questions directly.`;
+  const prompt = `${SYSTEM_PREAMBLE}${rootLine}${setupLine}${memoryLine}${pageLine}${imageLine}\n\n--- Conversation ---\n${convo}\nUser: ${message}\nAssistant:`;
 
   // Claude Code streams token-level deltas via stream-json + partial messages.
   // Other CLIs: pass their stdout through raw.

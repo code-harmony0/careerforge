@@ -140,7 +140,18 @@ export async function POST(req: Request) {
         .map((f) => `${f.id}\t${f.type}${f.required ? "*" : ""}\t${f.label}${f.options ? `\t[options: ${f.options.join(" | ")}]` : ""}`)
         .join("\n");
       const mem = readMemory().trim();
-      const prompt = `You are pre-filling a job application for the user (company/role: ${s.title}). Read cv.md and config/profile.yml; if a matching report for this company exists in reports/, read it too. Ground EVERY answer in the REAL candidate — never invent facts.${mem ? `\n\nDurable notes about the user:\n${mem}` : ""}
+      // Inline the source files: making the CLI Read them costs several agent
+      // round-trips (minutes on agy). Capped so argv stays small.
+      const root = careerOpsRoot();
+      const inline = (rel: string, cap: number) => {
+        try {
+          return fs.readFileSync(path.join(root, rel), "utf8").slice(0, cap);
+        } catch {
+          return "(missing)";
+        }
+      };
+      const sources = `\n\ncv.md:\n"""\n${inline("cv.md", 12_000)}\n"""\n\nconfig/profile.yml:\n"""\n${inline("config/profile.yml", 4_000)}\n"""`;
+      const prompt = `You are pre-filling a job application for the user (company/role: ${s.title}). The candidate's cv.md and profile.yml are below — do NOT read any files or run any tools; answer directly from them. Ground EVERY answer in the REAL candidate — never invent facts.${sources}${mem ? `\n\nDurable notes about the user:\n${mem}` : ""}
 
 FIELDS (id ⇥ type ⇥ label ⇥ options):
 ${fieldsList}
@@ -149,7 +160,9 @@ For each field give the best answer:
 - identity/contact (name, email, phone, github, linkedin, location) → from profile/cv.
 - free-text (Why us?, cover-letter, "most impactful thing you've built", etc.) → a concise, honest, concrete answer in the candidate's own voice (no buzzwords, active voice, real metrics only). Keep each under ~120 words.
 - select/radio → choose the best-matching option using the EXACT option text from the list.
-- NEVER fill legal / visa / work-authorization / salary / demographic / sensitive fields → set needs_confirmation:true and value:"".
+- salary EXPECTATION / expected CTC → for a REMOTE role use compensation.remote_expectation, otherwise compensation.target_range (from profile.yml, stated with its currency); if absent, leave it blank.
+- CURRENT compensation / current CTC → use compensation.current_ctc if present (still set needs_confirmation:true so the user verifies it); otherwise never guess and leave value:"".
+- NEVER fill legal / visa / work-authorization / demographic / sensitive fields → set needs_confirmation:true and value:"".
 
 Output ONLY a compact JSON object mapping each field id → {"value": "...", "needs_confirmation": boolean}. No prose, no markdown, no code fence.`;
 

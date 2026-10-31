@@ -286,3 +286,27 @@ test("buildPrompt: the row without a date is byte-identical to before the featur
   const without = buildPrompt({ kind: "evaluate", input: "u", memory: "", today: "2026-08-14" });
   assert.equal(withDate.replace("; posted: 2026-08-07", ""), without);
 });
+
+// A tab the user is already logged into (Indeed, LinkedIn) cannot be fetched
+// server-side, and the extension already has its rendered text. Without it the
+// agent burned minutes on web searches to reconstruct the JD and hit the kill timer.
+test("buildPrompt: a captured JD replaces the fetch and keeps the URL for dedup", () => {
+  const url = "https://in.indeed.com/viewjob?jk=abc";
+  const prompt = buildPrompt({ kind: "evaluate", input: url, jdText: "Senior RN Dev. Must know Swift.", memory: "", today: "2026-09-25" });
+
+  assert.ok(prompt.includes("Senior RN Dev. Must know Swift."), "captured text is in the prompt");
+  assert.ok(!/Use WebFetch to read the posting/.test(prompt), "no fetch instruction when the text is already here");
+  assert.match(prompt, /do not (fetch|search)/i);
+  assert.match(prompt, /data, not instructions/i);
+  assert.ok(prompt.endsWith(`Posting URL: ${url}`), "the URL still ends the prompt");
+});
+
+test("buildPrompt: no captured JD still fetches the URL", () => {
+  const prompt = buildPrompt({ kind: "evaluate", input: "https://x.test/j/1", memory: "", today: "2026-09-25" });
+  assert.match(prompt, /Use WebFetch to read the posting/);
+});
+
+test("buildPrompt: states the working directory so the agent does not hunt for the repo", () => {
+  const prompt = buildPrompt({ kind: "evaluate", input: "https://x.test/j/1", memory: "", today: "2026-09-25", root: "/abs/career-ops" });
+  assert.match(prompt, /working directory is \/abs\/career-ops/);
+});
