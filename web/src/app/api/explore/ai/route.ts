@@ -12,6 +12,7 @@ import { scopeFrom } from "@/lib/claude-invocation.mjs";
 import { fencingReport } from "@/lib/cli-fencing.mjs";
 import { codexFencingSupported } from "@/lib/cli-fencing-probe.mjs";
 import { readJsonObject } from "@/lib/json-body";
+import { loadTargetingContext, formatTargetingBlock, formatSearchGuidance } from "@/lib/explore-targeting.mjs";
 
 // Deny list DERIVED, never hand-written: every one of the six advisor argvs
 // that spelled its own omitted MultiEdit, which --permission-mode acceptEdits
@@ -41,9 +42,11 @@ Follow modes/discover.md exactly. You are running headless for the web:
   <<offer:{"url":"…","title":"…","company":"…","location":"…","source":"ai-search","why":"…","postedHint":"…","ats":"…","verification":"unconfirmed"}>>
   Valid JSON, one per line, the moment you're confident — stream them as you go.
 - Between envelopes, narrate briefly (plain text) what you're searching — shown live as your reasoning.
-- Be frugal (~3–6 searches, stop at a strong set). EVERY candidate is UNVERIFIED.
-- Be a GENEROUS FINDER, not a judge: when a constraint (location, seniority, stage) can't be confirmed from the shallow signal, INCLUDE + flag the uncertainty in "why" — don't discard. NEVER score or judge fit; the A–F evaluation does that later, with the full JD.
-- DEDUP: skip anything already known below; don't re-propose the user's existing companies.
+- Be frugal (~3–6 targeted searches, stop at a strong set of 3–8 high-quality candidates).
+- STRICT CANDIDATE ELIGIBILITY: ONLY propose openings where the candidate is eligible to work based on the Candidate Targeting & Eligibility Constraints below. If a posting is geo-fenced to US/Canada/UK or requires citizenship/local work authorization the candidate does not have, DISCARD it immediately. For eligible roles, do not prematurely reject for minor skill nuances (the A–F evaluation evaluates full technical fit later).
+- DIRECT APPLICATION LINKS ONLY: Emit direct job posting URLs on ATS platforms (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, etc.) or company career portals. NEVER propose aggregated job boards (LinkedIn search results, Indeed search URLs) or expired listings.
+- EXPLAIN COMPATIBILITY IN "why": State why this matches the user's search AND how the candidate is eligible (e.g., "Worldwide remote contractor role", "Dubai on-site with visa sponsorship", "India remote").
+- DEDUP: skip anything already known below; don't re-propose the user's existing companies or known URLs.
 `;
 
 export async function POST(req: Request) {
@@ -70,11 +73,16 @@ export async function POST(req: Request) {
     return Response.json({ code: "MODE_MISSING", error: "AI search needs a newer career-ops — update to enable it." }, { status: 400 });
   }
 
+  const dataRoot = careerOpsRoot();
+  const targeting = loadTargetingContext(dataRoot);
+  const targetingBlock = formatTargetingBlock(targeting);
+  const searchGuidance = formatSearchGuidance(query, targeting);
+
   const { lines, urls: knownUrls } = assembleDedupContext();
   const memory = readMemory();
   const memoryLine = memory.trim() ? `\n\nWHAT YOU KNOW ABOUT THE USER (persistent memory):\n${memory.trim()}` : "";
   const knownBlock = lines.length ? `\n\n--- ALREADY KNOWN (dedup — do NOT propose these) ---\n${lines.join("\n")}` : "";
-  const prompt = `${mode}${OUTPUT_CONTRACT}${memoryLine}${knownBlock}\n\n--- USER INTENT ---\n${query}\n`;
+  const prompt = `${mode}${OUTPUT_CONTRACT}${targetingBlock}${memoryLine}${knownBlock}\n\n${searchGuidance}\n\n--- USER INTENT ---\n${query}\n`;
 
   const isClaude = cliId === "claude";
   const isCodex = cliId === "codex";

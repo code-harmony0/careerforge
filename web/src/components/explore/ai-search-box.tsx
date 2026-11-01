@@ -5,9 +5,9 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import { CostBadge } from "@/components/cost/cost-badge";
 
 const EXAMPLES = [
-  "AI infra roles at climate startups, remote EU",
-  "Forward-deployed engineer at Series A devtools, US-remote",
-  "Head of Applied AI at healthtech, posted this week",
+  "Senior React Native / Mobile, remote or Dubai",
+  "React Native freelance or contractor, worldwide remote",
+  "Mobile Tech Lead or Senior Frontend (Next.js), India/remote",
 ];
 
 // The "magic" natural-language box: a soft contained halo at rest that intensifies
@@ -68,7 +68,7 @@ export function AiSearchBox({
               if (intent.trim()) onSubmit();
             }
           }}
-          placeholder="“AI infra at climate startups, remote EU, not staff-level” — plain language, your words"
+          placeholder="“Senior React Native, worldwide remote or Dubai contractor” — plain language, your words"
         />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-[12px] text-muted">
