@@ -31,20 +31,55 @@ export function canon(u: string): string {
   return normalizeUrl(u);
 }
 
+export function detectAtsFromUrl(url: string): string {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.includes("greenhouse.io")) return "greenhouse";
+    if (host.includes("lever.co")) return "lever";
+    if (host.includes("ashbyhq.com")) return "ashby";
+    if (host.includes("myworkdayjobs.com")) return "workday";
+    if (host.includes("smartrecruiters.com")) return "smartrecruiters";
+    if (host.includes("workable.com")) return "workable";
+    if (host.includes("bamboohr.com")) return "bamboohr";
+    if (host.includes("breezy.hr")) return "breezy";
+    if (host.includes("recruitee.com")) return "recruitee";
+    if (host.includes("rippling.com")) return "rippling";
+  } catch {}
+  return "other";
+}
+
+export function isAggregateSearchUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    const p = u.pathname.toLowerCase();
+    if (host.includes("linkedin.com") && (p.startsWith("/jobs/search") || p === "/jobs/")) return true;
+    if (host.includes("indeed.") && (p.startsWith("/jobs") || p.startsWith("/q-"))) return true;
+    if (host.includes("google.") && p.startsWith("/search")) return true;
+    if (host.includes("bing.com") && p.startsWith("/search")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function toOffer(raw: unknown): DiscoveredOffer | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const url = typeof o.url === "string" ? o.url.trim() : "";
   if (!/^https?:\/\//i.test(url)) return null;
+  if (isAggregateSearchUrl(url)) return null;
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   const conf = o.confidence;
+  const rawAts = str(o.ats);
+  const ats = rawAts && rawAts !== "other" ? rawAts : detectAtsFromUrl(url);
   return {
     url,
     company: str(o.company),
     title: str(o.title),
     location: str(o.location),
     postedAt: "", // AI gives only a human postedHint, never a trustworthy date
-    ats: str(o.ats) || "other",
+    ats,
     source: "ai-search",
     verification: "unconfirmed",
     why: str(o.why) || undefined,

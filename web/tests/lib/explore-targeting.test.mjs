@@ -63,13 +63,15 @@ location_filter:
     assert.match(block, /CANDIDATE TARGETING & ELIGIBILITY/);
     assert.match(block, /India · Bengaluru/);
     assert.match(block, /Worldwide Remote/);
+    assert.match(block, /CONTRACT & FREELANCE SPECIFICS/);
     assert.match(block, /HARD DISQUALIFIERS/);
     assert.match(block, /US Remote only/);
 
     const guidance = formatSearchGuidance("react native, freelance", ctx);
-    assert.match(guidance, /react native, freelance/);
+    assert.match(guidance, /react native freelance/);
     assert.match(guidance, /worldwide remote/);
-    assert.match(guidance, /VERIFY ELIGIBILITY/);
+    assert.match(guidance, /CONTRACT ROLES/);
+    assert.match(guidance, /VERIFY LOCATION/);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

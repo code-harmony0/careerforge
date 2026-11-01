@@ -120,6 +120,11 @@ export function formatTargetingBlock(targeting) {
     lines.push(`  * Relocation: Open to relocating if the employer provides visa sponsorship and relocation.`);
   }
 
+  lines.push(`- CONTRACT & FREELANCE SPECIFICS (CRITICAL):`);
+  lines.push(`  * Distinguish GLOBAL / INTERNATIONAL contractors from DOMESTIC geo-fenced contractors.`);
+  lines.push(`  * ACCEPT: Roles explicitly open to Worldwide / Global contractors, B2B international contracts (e.g. via Deel, Remote.com, Oyster, or direct invoicing), or contracts in the candidate's allowed regions (${allowedLocations.length > 0 ? allowedLocations.join(", ") : candidate.country}).`);
+  lines.push(`  * REJECT: Any contract/freelance role restricted to domestic tax residents (e.g. "US only", "Canada only", "Must reside in North America", "W-2 only", "1099 US-citizens/Green Card only", "UK IR35 only"). Even if labeled "contract" or "freelance", if it requires North American or UK residence/authorization, DISCARD IT.`);
+
   lines.push(`- HARD DISQUALIFIERS (DISCARD IMMEDIATELY — NEVER PROPOSE):`);
   lines.push(`  * Postings geo-restricted to US, Canada, UK, or EU-citizens only (e.g. "US Remote only", "Must reside in Canada", "US Citizenship or Green Card required", "W-2 only", "Right to work in UK without sponsorship").`);
   if (blockedLocations.length > 0) {
@@ -135,22 +140,38 @@ export function formatTargetingBlock(targeting) {
   return lines.join("\n") + "\n";
 }
 
+export function extractSearchTokens(query) {
+  return (query || "")
+    .replace(/[^\p{L}\p{N}\s+-]/gu, " ")
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1);
+}
+
 export function formatSearchGuidance(query, targeting) {
   const allowedHubs = targeting?.allowedLocations?.length
     ? targeting.allowedLocations.slice(0, 4).join('" OR "')
     : "Dubai\" OR \"UAE\" OR \"Saudi\" OR \"India";
-  const cleanQ = (query || "").replace(/"/g, "").trim();
+  const tokens = extractSearchTokens(query);
+  const cleanQ = tokens.join(" ");
+
+  // Formulate high-signal search query examples without punctuation
+  const sampleAtsQuery = tokens.length > 0
+    ? `"${tokens[0]}" ${tokens.slice(1).join(" ")} ("worldwide remote" OR "contractor" OR "${allowedHubs}") (site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:myworkdayjobs.com)`
+    : `("worldwide remote" OR "${allowedHubs}") (site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com)`;
 
   return `--- SEARCH STRATEGY & REASONING GUIDANCE ---
-Target Search Intent: "${cleanQ}"
+Target Search Intent: "${cleanQ || query}"
 When searching the web:
-1. TARGETED QUERIES: Formulate high-precision queries combining the intent with eligible locations, e.g.:
-   "${cleanQ}" ("worldwide remote" OR "remote contractor" OR "${allowedHubs}") (site:greenhouse.io OR site:lever.co OR site:ashbyhq.com OR site:myworkdayjobs.com OR "careers")
-2. VERIFY ELIGIBILITY BEFORE EMITTING:
-   Look for location and work authorization in the search snippet or page. If the role states "Must be located in Canada" or "US only", DISCARD it immediately and continue searching.
-3. DIRECT JOB POSTINGS ONLY:
+1. TARGETED QUERIES (NO RAW PUNCTUATION): Formulate clean search queries without commas, e.g.:
+   ${sampleAtsQuery}
+2. VERIFY LOCATION & WORK RIGHTS BEFORE EMITTING:
+   Check the job snippet or JD text for location restrictions. If it says "Canada only", "US only", or "Must be authorized to work in US without sponsorship", DISCARD it immediately and keep looking.
+3. CONTRACT ROLES:
+   If the search mentions "freelance" or "contract", verify it is open to international / worldwide contractors or remote from India/Gulf. Reject US W-2 or Canadian domestic contractor openings.
+4. DIRECT JOB POSTINGS ONLY:
    Emit links pointing to single, live job requisitions on ATS portals (Greenhouse, Lever, Ashby, Workday, etc.) or company career sites.
-4. EXPLAIN COMPATIBILITY:
+5. EXPLAIN COMPATIBILITY:
    In the "why" field, state how it matches the user's intent AND why the candidate is eligible (e.g. "Worldwide remote contractor role", "Dubai on-site with visa sponsorship", "India remote/onsite").
 `;
 }

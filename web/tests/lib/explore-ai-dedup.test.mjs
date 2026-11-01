@@ -76,3 +76,17 @@ test("two scheme-valid but URL-unparseable offers BOTH survive — an empty key 
   assert.equal(offers[0].offer.url, unparseableA);
   assert.equal(offers[1].offer.url, unparseableB);
 });
+
+test("aggregate search URLs (LinkedIn/Indeed search result lists) are rejected, not returned as offers", () => {
+  const parser = makeAiStreamParser();
+  const searchUrl = "https://www.linkedin.com/jobs/search?keywords=react+native";
+  const realUrl = "https://jobs.ashbyhq.com/acme/12345";
+  const chunks = [
+    ...parser.feed(envelope({ url: searchUrl, company: "LinkedIn", title: "Search Results" })),
+    ...parser.feed(envelope({ url: realUrl, company: "Acme", title: "Senior React Native Engineer" })),
+  ];
+  const offers = chunks.filter((c) => c.kind === "offer");
+  assert.equal(offers.length, 1, "aggregate search URL should have been filtered out");
+  assert.equal(offers[0].offer.url, realUrl);
+  assert.equal(offers[0].offer.ats, "ashby", "ATS should be auto-detected from URL domain");
+});
