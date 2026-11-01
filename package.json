@@ -111,7 +111,7 @@
     "dotenv": "^18.0.4",
     "js-yaml": "^5.3.0",
     "playwright": "1.64.1",
-    "undici": "^7.30.1"
+    "undici": "^8.12.3"
   },
   "bugs": {
     "url": "https://github.com/code-harmony0/careerforge/issues"
