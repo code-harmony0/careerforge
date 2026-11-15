@@ -154,6 +154,65 @@ const CODEX_PERMISSION_TOKENS = Object.freeze([
   "--full-auto",
 ]);
 
+/** Antigravity permission tokens that must not be pre-spelled in an unfenced argv. */
+const ANTIGRAVITY_PERMISSION_TOKENS = Object.freeze([
+  "--dangerously-skip-permissions",
+  "--sandbox",
+]);
+
+/**
+ * Refuse an argv whose caller already fenced antigravity.
+ *
+ * @param {string[]} args
+ */
+function assertAntigravityArgvUnfenced(args) {
+  const spelled = args
+    .slice(0, -1)
+    .find((arg) => ANTIGRAVITY_PERMISSION_TOKENS.includes(arg.split("=")[0]));
+  if (spelled !== undefined) {
+    throw new Error(
+      `cli-fencing: antigravity argv already spells ${JSON.stringify(spelled)}. ` +
+        "Permission belongs to the capability record, not the call site — declare it in worker-capabilities.mjs.",
+    );
+  }
+}
+
+/**
+ * Translate worker capabilities into Antigravity CLI flags.
+ *
+ * In headless mode (`agy -p`), tools (reading files, fetching URLs) prompt on
+ * stdin. Because spawnHeadlessCli closes stdin, any tool request without
+ * auto-approval is soft-denied by Jetski with no output produced.
+ * `--dangerously-skip-permissions` permits non-interactive tool execution.
+ * When `writes: false`, `--sandbox` is also applied to restrict terminal commands.
+ *
+ * All flags must precede `-p` / `--print`: `-p` consumes the immediate next token
+ * as its prompt argument.
+ *
+ * @param {string[]} args
+ * @param {import("./worker-capabilities.mjs").Capabilities} capabilities
+ * @returns {string[]}
+ */
+function fenceAntigravityArgs(args, capabilities) {
+  assertAntigravityArgvUnfenced(args);
+  const pIndex = args.findIndex((arg) => arg === "-p" || arg === "--print" || arg === "--prompt");
+  if (pIndex === -1) {
+    throw new Error(
+      `cli-fencing: antigravity argv must contain a "-p" flag followed by a prompt, got ${JSON.stringify(args)}. ` +
+        "Sandbox flags have no known-safe insertion point in this argv shape.",
+    );
+  }
+  const flags = ["--dangerously-skip-permissions"];
+  if (!capabilities.writes) {
+    flags.push("--sandbox");
+  }
+  return [
+    ...args.slice(0, pIndex),
+    ...flags,
+    ...args.slice(pIndex),
+  ];
+}
+
 /**
  * `-c` keys that change sandbox, approval, or web-access policy.
  *
@@ -337,6 +396,7 @@ export const CODEX_REQUIRED_EXEC_FLAGS = Object.freeze([
 const FENCERS = Object.freeze({
   claude: verifyClaudeArgs,
   codex: fenceCodexArgs,
+  antigravity: fenceAntigravityArgs,
 });
 
 /**

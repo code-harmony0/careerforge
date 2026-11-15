@@ -8,9 +8,43 @@
   </head>
   <body>
     <header id="app-header">
-      <span id="app-logo">co</span>
-      <span id="app-title">career-ops</span>
+      <div id="app-header-brand">
+        <span id="app-logo">co</span>
+        <span id="app-title">career-ops</span>
+      </div>
+      <div id="app-header-actions">
+        <button id="btn-new-chat" class="header-btn" type="button" title="Start a new chat or evaluation">
+          <span class="btn-icon">+</span>
+          <span>New</span>
+        </button>
+        <button id="btn-history" class="header-btn" type="button" title="View past chats and evaluations">
+          <span class="btn-icon">🕒</span>
+          <span>History</span>
+          <span id="history-badge" class="header-badge hidden">0</span>
+        </button>
+      </div>
     </header>
+
+    <div id="history-view" class="history-view hidden">
+      <div class="history-header">
+        <div class="history-header-top">
+          <span class="history-title">Saved Chats & Evaluations</span>
+          <button id="btn-close-history" class="history-close-btn" type="button" title="Close history">✕</button>
+        </div>
+        <div class="history-search-row">
+          <input id="history-search" type="text" placeholder="Search past jobs & chats…" autocomplete="off" />
+        </div>
+      </div>
+      <div id="history-list" class="history-list"></div>
+      <div class="history-footer">
+        <button id="btn-clear-history" class="history-clear-btn" type="button">Clear all history</button>
+        <div id="history-clear-confirm" class="history-clear-confirm hidden">
+          <span class="history-clear-prompt">Clear all history?</span>
+          <button id="btn-confirm-clear" class="history-confirm-btn" type="button">Yes, clear</button>
+          <button id="btn-cancel-clear" class="history-cancel-btn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <div id="scroll-area">
       <div id="capture-card" class="hidden">
@@ -33,6 +67,10 @@
       </div>
 
       <div id="result-card" class="hidden">
+        <div id="cached-notice" class="cached-notice hidden">
+          <span class="cached-label">⚡ Previously evaluated</span>
+          <button id="btn-reevaluate" class="reevaluate-btn" type="button" title="Run a fresh evaluation for this job">Re-evaluate</button>
+        </div>
         <div id="score-badge"></div>
         <div id="result-summary"></div>
         <a id="open-report" class="hidden" target="_blank" rel="noopener">Open full report →</a>

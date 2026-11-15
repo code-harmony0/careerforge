@@ -391,11 +391,33 @@ export async function POST(req: Request) {
           }
           sendWarnings(result.warnings);
           const reportN = Number(result.num);
+          const scoreNum = result.score ? parseFloat(result.score) : null;
+          const score = typeof scoreNum === "number" && !Number.isNaN(scoreNum) ? scoreNum : null;
+          const summary = result.summary || "";
           if (Number.isFinite(reportN)) {
             const appN = findApplicationByReportNum(String(reportN))?.n;
-            send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportN, reportNum: String(reportN), appN });
+            send({
+              type: "done",
+              tokens: lastTokens,
+              costUsd: lastCostUsd,
+              reportN,
+              reportNum: String(reportN),
+              appN,
+              score,
+              summary,
+              company: result.company,
+              role: result.role,
+            });
           } else {
-            send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd });
+            send({
+              type: "done",
+              tokens: lastTokens,
+              costUsd: lastCostUsd,
+              score,
+              summary,
+              company: result.company,
+              role: result.role,
+            });
           }
         } catch (e) {
           send({ type: "error", msg: `Evaluation persist crashed unexpectedly: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
@@ -499,6 +521,7 @@ export async function POST(req: Request) {
             noOutputMessage: noOutputError(),
             sawError,
             cleanExit,
+            agentText: reportFilter?.rawText?.(),
           });
           if (!outcome.ok) {
             send({ type: "error", msg: outcome.message });

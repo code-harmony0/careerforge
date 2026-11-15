@@ -56,6 +56,8 @@ export async function runEvaluate({ serverUrl, cliId, url, jdText, signal, onSta
   let buf = "";
   let text = "";
   let verdictLine = "";
+  let serverScore = null;
+  let serverSummary = "";
   let reportNum; // the REPORT FILE number (reports/{n}-...md) — for pdf/cover job `input`
   let appN; // the TRACKER ROW number — separate, diverging counter (see career-ops.ts's
   // findApplicationByReportNum) — for anything that navigates/writes by application #
@@ -90,14 +92,16 @@ export async function runEvaluate({ serverUrl, cliId, url, jdText, signal, onSta
           onStatus(`${phase} · ${fmtElapsed(Date.now() - startedAt)}`);
         } else if (ev.type === "text") {
           const full = text + ev.text;
-          const vm = full.match(/VERDICT:[^\n]*/i);
+          const vm = full.match(/(?:\*{0,2}VERDICT[:\s*]*)[^\n]*/i);
           if (vm) verdictLine = vm[0];
           text = full.slice(-4000);
           phase = "Writing the report…";
           onStatus(phase);
-        } else if (ev.type === "done" && typeof ev.reportNum === "string") {
-          reportNum = ev.reportNum;
+        } else if (ev.type === "done") {
+          if (typeof ev.reportNum === "string") reportNum = ev.reportNum;
           if (typeof ev.appN === "string") appN = ev.appN;
+          if (typeof ev.score === "number" && !Number.isNaN(ev.score)) serverScore = ev.score;
+          if (typeof ev.summary === "string") serverSummary = ev.summary;
         } else if (ev.type === "error") {
           onError(ev.msg || "Evaluation failed.");
           return;
@@ -113,7 +117,9 @@ export async function runEvaluate({ serverUrl, cliId, url, jdText, signal, onSta
     return;
   }
 
-  const { score, summary } = parseVerdict(verdictLine || text);
+  const parsed = parseVerdict(verdictLine || text);
+  const score = serverScore != null ? serverScore : parsed.score;
+  const summary = serverSummary || parsed.summary || "";
   // /pipeline/{n} navigation wants the application (row) number, not the
   // report file number — they usually coincide but are separate counters
   // that can diverge (see career-ops.ts's findApplicationByReportNum). Fall

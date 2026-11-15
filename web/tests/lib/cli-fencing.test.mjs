@@ -40,7 +40,7 @@ test("the fixture these guards read still looks like itself", () => {
   // Given a suite that leans on KNOWN_KINDS to enumerate work
   // When it is empty, every loop below passes vacuously
   assert.ok(KNOWN_KINDS.length > 0, "KNOWN_KINDS must not be empty");
-  for (const id of ["codex", "claude"]) {
+  for (const id of ["codex", "claude", "antigravity"]) {
     assert.equal(fencingReport({ cliId: id, cliName: id, capabilities: CAPS.workspaceWrite }).level, "full",
       `${id} must still be fenceable`);
   }
@@ -341,7 +341,7 @@ test("claude is fenced by its own tool flags, so its argv passes through", () =>
 
 test("a CLI with no verified mechanism is passed through and reported honestly", () => {
   // Given the runtimes nobody has been able to verify a fencing mechanism for
-  for (const cliId of ["gemini", "opencode", "copilot", "qwen", "antigravity", "grok"]) {
+  for (const cliId of ["gemini", "opencode", "copilot", "qwen", "grok"]) {
     const original = ["-p", "PROMPT"];
     const { args } = fenceArgs({ cliId, args: original, capabilities: CAPS.workspaceWrite });
 
@@ -521,12 +521,12 @@ test("each notice is detectable by the UI and names the runtime", () => {
 
 test("fencingReport answers for the runtimes the routes actually ask about", () => {
   // Given the routes call it for every entry in clis.ts
-  for (const cliId of ["gemini", "opencode", "copilot", "qwen", "antigravity", "grok"]) {
+  for (const cliId of ["gemini", "opencode", "copilot", "qwen", "grok"]) {
     // Then each unverified runtime reports honestly rather than defaulting to a
     // reassuring answer.
     assert.equal(fencingReport({ cliId, cliName: cliId, capabilities: CAPS.localReadOnly }).level, "none");
   }
-  for (const cliId of ["claude", "codex"]) {
+  for (const cliId of ["claude", "codex", "antigravity"]) {
     assert.equal(fencingReport({ cliId, cliName: cliId, capabilities: CAPS.localReadOnly }).level, "full");
   }
 });
@@ -587,4 +587,32 @@ test("a prototype-inherited cliId is not mistaken for a fencer", () => {
     assert.deepEqual(out, args, `${cliId} must not resolve to a fencer`);
     assert.equal(fencingReport({ cliId, cliName: cliId, capabilities: CAPS.localReadOnly }).level, "none");
   }
+});
+
+test("antigravity non-writing worker gets --dangerously-skip-permissions and --sandbox before -p", () => {
+  const original = ["-p", "PROMPT"];
+  const { args } = fenceArgs({ cliId: "antigravity", args: original, capabilities: CAPS.localReadOnly });
+  assert.deepEqual(args, ["--dangerously-skip-permissions", "--sandbox", "-p", "PROMPT"]);
+});
+
+test("antigravity writing worker gets --dangerously-skip-permissions without --sandbox", () => {
+  const original = ["-p", "PROMPT"];
+  const { args } = fenceArgs({ cliId: "antigravity", args: original, capabilities: CAPS.workspaceWrite });
+  assert.deepEqual(args, ["--dangerously-skip-permissions", "-p", "PROMPT"]);
+});
+
+test("antigravity argv already spelling permission flags is refused", () => {
+  for (const flag of ["--dangerously-skip-permissions", "--sandbox"]) {
+    assert.throws(
+      () => fenceArgs({ cliId: "antigravity", args: [flag, "-p", "PROMPT"], capabilities: CAPS.localReadOnly }),
+      /already spells/,
+    );
+  }
+});
+
+test("antigravity argv missing -p throws", () => {
+  assert.throws(
+    () => fenceArgs({ cliId: "antigravity", args: ["--other", "PROMPT"], capabilities: CAPS.localReadOnly }),
+    /must contain a "-p" flag/,
+  );
 });

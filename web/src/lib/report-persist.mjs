@@ -27,12 +27,22 @@ const TITLE_RE = /^#\s+Evaluation:\s+(.+?)\s+(?:—|--|–|-)\s+(.+)$/m;
  * Pure, and here rather than in the route, because it is the decision point
  * for the backend evaluate pipeline: nothing is written unless this says yes.
  *
- * @param {{envelope: object|undefined, noOutputMessage: string|null, sawError: boolean, cleanExit: boolean}} signals
+ * @param {{envelope: object|undefined, noOutputMessage: string|null, sawError: boolean, cleanExit: boolean, agentText?: string}} signals
  * @returns {{ok: true} | {ok: false, message: string}}
  */
-export function evaluateRunOutcome({ envelope, noOutputMessage, sawError, cleanExit }) {
+export function evaluateRunOutcome({ envelope, noOutputMessage, sawError, cleanExit, agentText }) {
   if (noOutputMessage) return { ok: false, message: noOutputMessage };
   if (envelope?.ok !== true || !cleanExit || sawError) {
+    if (agentText) {
+      const loginWallMatch = agentText.match(/(?:login wall|sign-in|inaccessible|behind login|paste the full job description|paste the JD text)[^\n]*/i);
+      const jdUnavailable = agentText.includes("needs_confirmation: jd_unavailable") || Boolean(loginWallMatch);
+      if (jdUnavailable) {
+        return {
+          ok: false,
+          message: "The job posting could not be retrieved because it is behind a login wall or inaccessible. Please copy and paste the job description text to evaluate it.",
+        };
+      }
+    }
     const why = envelope && envelope.ok === false ? ` (${envelope.error})` : "";
     return {
       ok: false,
@@ -109,7 +119,13 @@ export function parseReportMeta(markdown) {
       return { ok: false, error: `The report's Machine Summary has a tab or newline in ${field}, so the tracker row cannot be built.` };
     }
   }
-  return { ok: true, company, role, score, via };
+  const decisionLead = String(markdown ?? "").match(/^\*\*(?:Apply|Consider|Skip|Pass|Research first|Investigate)\.\*\*\s*(.+)$/m);
+  const decisionHeader = String(markdown ?? "").match(/\*\*Decision:\*\*\s*(.+)$/m);
+  const verdictLine = String(markdown ?? "").match(/(?:\*{0,2}VERDICT[:\s*]*)\s*[\d.]+\s*\/\s*5(?:\*{0,2})\s*(?:[—:|-]+\s*(.+))?/i);
+  const rawSummary = decisionLead?.[1] || verdictLine?.[1] || decisionHeader?.[1] || yamlScalar(fence, "final_decision") || "";
+  const summary = rawSummary.trim().replace(/\s+/g, " ").slice(0, 200);
+
+  return { ok: true, company, role, score, via, summary };
 }
 
 /**
@@ -323,5 +339,14 @@ export async function persistEvaluation({ spawnFn, execPath, root, coreRoot = ro
       warnings.push("Evaluation saved, but the inbox checkbox could not be updated.");
     }
   }
-  return { ok: true, num, reportFile, warnings };
+  return {
+    ok: true,
+    num,
+    reportFile,
+    warnings,
+    score: meta.score,
+    summary: meta.summary,
+    company: meta.company,
+    role: meta.role,
+  };
 }

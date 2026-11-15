@@ -11,13 +11,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   accumulateTokens,
+  antigravityStreamArgs,
   codexStreamArgs,
   completedReportNames,
   hasNewCompletedReport,
   newCompletedReportNum,
+  isFatalAntigravityStderr,
   isFatalClaudeStderr,
   isFatalCodexStderr,
   isFatalGenericStderr,
+  parseAntigravityEvent,
   parseClaudeEvent,
   parseCodexEvent,
   parseGrokEvent,
@@ -558,6 +561,122 @@ test("the argv keeps --json and the parser reads the JSONL it turns on", () => {
   // rather than claiming a round-trip it never performs.
   assert.ok(codexStreamArgs("p").includes("--json"));
   assert.deepEqual(parseCodexEvent(JSON.stringify({ type: "thread.started" })), { status: "Agent ready" });
+});
+
+test("antigravityStreamArgs turns on the stream-json that parseAntigravityEvent reads", () => {
+  const args = antigravityStreamArgs("PROMPT");
+  assert.deepEqual(args, ["--disable-slash-commands", "-p", "PROMPT", "--output-format", "stream-json"]);
+});
+
+test("parseAntigravityEvent maps init to Agent ready", () => {
+  const ev = parseAntigravityEvent(JSON.stringify({ event: "init" }));
+  assert.deepEqual(ev, { status: "Agent ready" });
+});
+
+test("parseAntigravityEvent maps tools correctly", () => {
+  assert.deepEqual(
+    parseAntigravityEvent(JSON.stringify({
+      event: "step_update",
+      step_update: { step_type: "tool", state: "ACTIVE", tool_name: "run_command" },
+    })),
+    { tool: "Bash" },
+  );
+  assert.deepEqual(
+    parseAntigravityEvent(JSON.stringify({
+      event: "step_update",
+      step_update: { step_type: "tool", state: "ACTIVE", tool_name: "search_web" },
+    })),
+    { tool: "WebSearch" },
+  );
+  assert.deepEqual(
+    parseAntigravityEvent(JSON.stringify({
+      event: "step_update",
+      step_update: { step_type: "tool", state: "ACTIVE", tool_name: "read_file" },
+    })),
+    { tool: "Read" },
+  );
+  assert.deepEqual(
+    parseAntigravityEvent(JSON.stringify({
+      event: "step_update",
+      step_update: { step_type: "tool", state: "ACTIVE", tool_name: "write_to_file" },
+    })),
+    { tool: "Write" },
+  );
+  assert.deepEqual(
+    parseAntigravityEvent(JSON.stringify({
+      event: "step_update",
+      step_update: { step_type: "tool", state: "ACTIVE", tool_name: "custom_mcp_tool" },
+    })),
+    { tool: "custom_mcp_tool" },
+  );
+});
+
+test("parseAntigravityEvent extracts text_delta and ignores non-text steps", () => {
+  assert.deepEqual(
+    parseAntigravityEvent(JSON.stringify({
+      event: "step_update",
+      step_update: { step_type: "agent_response", state: "ACTIVE", text_delta: "streaming chunk" },
+    })),
+    { text: "streaming chunk" },
+  );
+  assert.equal(
+    parseAntigravityEvent(JSON.stringify({
+      event: "step_update",
+      step_update: { step_type: "agent_response", state: "ACTIVE", text_delta: "" },
+    })),
+    null,
+  );
+  assert.equal(
+    parseAntigravityEvent(JSON.stringify({
+      event: "step_update",
+      step_update: { step_type: "user_input" },
+    })),
+    null,
+  );
+});
+
+test("parseAntigravityEvent computes usage tokens from result event subtracting cache_read_tokens", () => {
+  const ev = parseAntigravityEvent(JSON.stringify({
+    event: "result",
+    result: {
+      status: "SUCCESS",
+      usage: { input_tokens: 24145, cache_read_tokens: 19522, output_tokens: 651 },
+    },
+  }));
+  // (24145 - 19522) = 4623 fresh + 651 output = 5274
+  assert.deepEqual(ev, { tokens: 5274, tokensAreTotal: true, costUsd: null });
+  assert.equal(accumulateTokens(100, ev), 5274);
+});
+
+test("parseAntigravityEvent surfaces result error or failure status", () => {
+  const errEv = parseAntigravityEvent(JSON.stringify({
+    event: "result",
+    result: { status: "ERROR", error: "Fatal execution problem" },
+  }));
+  assert.deepEqual(errEv, { error: "Fatal execution problem" });
+
+  const failEv = parseAntigravityEvent(JSON.stringify({
+    event: "result",
+    result: { status: "FAILED" },
+  }));
+  assert.deepEqual(failEv, { error: "Antigravity CLI failed with status FAILED" });
+});
+
+test("parseAntigravityEvent surfaces top-level error event", () => {
+  const ev = parseAntigravityEvent(JSON.stringify({
+    event: "error",
+    error: { message: "Internal server error" },
+  }));
+  assert.deepEqual(ev, { error: "Internal server error" });
+});
+
+test("isFatalAntigravityStderr discriminates fatal auth/quota and permissions from benign warnings", () => {
+  assert.equal(isFatalAntigravityStderr("You are not logged into Antigravity."), true);
+  assert.equal(isFatalAntigravityStderr("jetski: no output produced — a tool required the \"read_url\" permission that headless mode cannot prompt for, so it was auto-denied."), true);
+  assert.equal(isFatalAntigravityStderr("HTTP 401 unauthorized"), true);
+  assert.equal(isFatalAntigravityStderr("quota exceeded"), true);
+  assert.equal(isFatalAntigravityStderr("rate limit hit, retrying in 5s"), false);
+  assert.equal(isFatalAntigravityStderr("W1113 12:46:07.262378 27 defaults.go:719 failed to get cs path"), false);
 });
 
 // ── the fallback stderr classifier (#1974) ──────────────────────────────────

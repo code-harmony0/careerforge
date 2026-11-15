@@ -173,5 +173,9 @@ export function createReportEnvelopeFilter() {
     result() {
       return parseReportEnvelope(raw);
     },
+
+    rawText() {
+      return raw;
+    },
   };
 }

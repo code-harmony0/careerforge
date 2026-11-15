@@ -120,6 +120,19 @@ test("evaluateRunOutcome: missing envelope fails closed", () => {
   assert.match(outcome.message, /no <<report-md>> envelope/);
 });
 
+test("evaluateRunOutcome: missing envelope with login wall agent text gives actionable message", () => {
+  const outcome = evaluateRunOutcome({
+    envelope: { ok: false, error: "The agent emitted no <<report-md>> envelope, so there is no report to save." },
+    noOutputMessage: null,
+    sawError: false,
+    cleanExit: true,
+    agentText: "needs_confirmation: jd_unavailable https://example.com - paste the JD text to evaluate it\nPosting inaccessible behind login wall",
+  });
+  assert.equal(outcome.ok, false);
+  assert.match(outcome.message, /behind a login wall or inaccessible/i);
+  assert.match(outcome.message, /paste the job description text/i);
+});
+
 test("evaluateRunOutcome: clean envelope is ok", () => {
   const outcome = evaluateRunOutcome({
     envelope: { ok: true, markdown: REPORT },
@@ -159,6 +172,44 @@ test("parseReportMeta: Machine Summary wins; title is fallback", () => {
   assert.equal(meta.role, "Senior Engineer");
   assert.equal(meta.score, "4.2/5");
   assert.equal(meta.via, null);
+});
+
+test("parseReportMeta: extracts summary from decision lead or yaml final_decision", () => {
+  const mdWithLead = `# Evaluation: Quixta — Senior React Native Developer
+**Date:** 2026-11-05
+**Score:** 4.3/5
+**Decision:** Apply
+
+**Apply.** Strong technical match on React Native architecture.
+
+## Machine Summary
+\`\`\`yaml
+company: "Quixta"
+role: "Senior React Native Developer"
+score: 4.3
+final_decision: "Apply"
+\`\`\`
+`;
+  const meta = parseReportMeta(mdWithLead);
+  assert.equal(meta.ok, true);
+  assert.equal(meta.score, "4.3/5");
+  assert.equal(meta.summary, "Strong technical match on React Native architecture.");
+
+  const mdWithVerdict = `# Evaluation: Acme — Role
+
+**VERDICT:** 4.1/5 — Decent match for frontend
+
+## Machine Summary
+\`\`\`yaml
+company: Acme
+role: Role
+score: 4.1
+\`\`\`
+`;
+  const metaVerdict = parseReportMeta(mdWithVerdict);
+  assert.equal(metaVerdict.ok, true);
+  assert.equal(metaVerdict.score, "4.1/5");
+  assert.equal(metaVerdict.summary, "Decent match for frontend");
 });
 
 test("parseReportMeta: title fallback when YAML omits company/role", () => {
@@ -269,6 +320,9 @@ test("persistEvaluation: writes report + TSV, reserves, merges, releases", async
     assert.equal(result.ok, true);
     assert.equal(result.num, "035");
     assert.equal(result.reportFile, "035-acme-ai-2026-08-04.md");
+    assert.equal(result.score, "4.2/5");
+    assert.equal(result.company, "Acme AI");
+    assert.equal(result.role, "Senior Engineer");
     assert.deepEqual(result.warnings, []);
     assert.equal(readFileSync(join(root, "data", "pipeline.md"), "utf8"), pipeline.replace("- [ ] https://acme.com/jobs/7", "- [x] https://acme.com/jobs/7"));
     assert.equal(existsSync(join(root, "data", "pipeline.md.lock")), false);

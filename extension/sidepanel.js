@@ -13,7 +13,22 @@ import { parseEnvelopes, stripEnvelopes, actionToPath } from "./lib/envelopes.js
 import { runEvaluate } from "./lib/run-evaluate.js";
 import { runJob } from "./lib/run-job.js";
 import { draftApplication } from "./lib/apply-draft.js";
-import { scoreTone } from "./lib/verdict.js";
+import { parseVerdict, scoreTone } from "./lib/verdict.js";
+import {
+  saveSession,
+  loadSessions,
+  getSession,
+  deleteSession,
+  clearAllSessions,
+  getActiveSessionId,
+  setActiveSessionId,
+  createSessionId,
+  deriveTitle,
+  formatSessionTime,
+  findEvaluatedSession,
+  isSameJobUrl,
+  normalizeJobUrl,
+} from "./lib/history-store.js";
 
 // Source of truth: web/src/lib/format.ts's CANONICAL_STATES / templates/states.yml.
 const CANONICAL_STATES = ["Evaluated", "Applied", "Responded", "Interview", "Offer", "Hired", "Rejected", "Discarded", "SKIP"];
@@ -21,6 +36,17 @@ const CANONICAL_STATES = ["Evaluated", "Applied", "Responded", "Interview", "Off
 const DEFAULT_SERVER = "http://localhost:3000";
 
 const els = {
+  btnNewChat: document.getElementById("btn-new-chat"),
+  btnHistory: document.getElementById("btn-history"),
+  historyBadge: document.getElementById("history-badge"),
+  historyView: document.getElementById("history-view"),
+  btnCloseHistory: document.getElementById("btn-close-history"),
+  historySearch: document.getElementById("history-search"),
+  historyList: document.getElementById("history-list"),
+  btnClearHistory: document.getElementById("btn-clear-history"),
+  historyClearConfirm: document.getElementById("history-clear-confirm"),
+  btnConfirmClear: document.getElementById("btn-confirm-clear"),
+  btnCancelClear: document.getElementById("btn-cancel-clear"),
   captureCard: document.getElementById("capture-card"),
   captureTitle: document.getElementById("capture-title"),
   captureUrl: document.getElementById("capture-url"),
@@ -33,6 +59,8 @@ const els = {
   statusText: document.getElementById("status-text"),
   stopEval: document.getElementById("stop-eval"),
   resultCard: document.getElementById("result-card"),
+  cachedNotice: document.getElementById("cached-notice"),
+  btnReevaluate: document.getElementById("btn-reevaluate"),
   scoreBadge: document.getElementById("score-badge"),
   resultSummary: document.getElementById("result-summary"),
   openReport: document.getElementById("open-report"),
@@ -69,6 +97,9 @@ const els = {
 };
 
 let history = [];
+let sessionMessages = [];
+let currentSessionId = null;
+let currentSession = null;
 let serverUrl = DEFAULT_SERVER;
 let cliId = "";
 let activeCapture = null;
@@ -87,6 +118,15 @@ function setEvalState(state) {
   els.resultCard.classList.toggle("hidden", state !== "result");
   els.errorCard.classList.toggle("hidden", state !== "error");
   els.emptyState.classList.toggle("hidden", state !== "idle");
+  if (state !== "result") hideCachedNotice();
+}
+
+function showCachedNotice() {
+  if (els.cachedNotice) els.cachedNotice.classList.remove("hidden");
+}
+
+function hideCachedNotice() {
+  if (els.cachedNotice) els.cachedNotice.classList.add("hidden");
 }
 
 function renderCapture(capture) {
@@ -94,51 +134,204 @@ function renderCapture(capture) {
   els.captureUrl.textContent = capture.url;
 }
 
-function startEvaluate(capture) {
+/**
+ * Check if the backend pipeline (tracker / reports) has an existing evaluation
+ * for this URL, in case it was evaluated outside this browser session.
+ */
+async function findRemoteEvaluatedApplication(url) {
+  if (!url || !serverUrl) return null;
+  try {
+    const res = await fetch(`${serverUrl}/api/pipeline`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const apps = Array.isArray(data.applications) ? data.applications : [];
+    const matched = apps.find((app) => {
+      if (app.url && isSameJobUrl(app.url, url)) return true;
+      if (app.applyLink && isSameJobUrl(app.applyLink, url)) return true;
+      return false;
+    });
+    if (!matched) return null;
+
+    const scoreNum = parseFloat(matched.score);
+    if (Number.isNaN(scoreNum) || scoreNum <= 0) {
+      // Scanned or in pipeline without a score — not evaluated yet!
+      return null;
+    }
+    const appN = parseInt(matched.n, 10) || matched.n;
+    const repMatch = typeof matched.report === "string" ? matched.report.match(/\[(\d+)\]/) : null;
+    const reportNum = repMatch ? parseInt(repMatch[1], 10) : appN;
+    const reportUrl = `${serverUrl}/pipeline/${appN}`;
+
+    let summary = matched.notes || "";
+    try {
+      const repRes = await fetch(`${serverUrl}/api/report?n=${reportNum}`);
+      if (repRes.ok) {
+        const repData = await repRes.json();
+        const content = repData?.report?.content || repData?.content;
+        if (content) {
+          const parsed = parseVerdict(content);
+          if (parsed.summary) summary = parsed.summary;
+        }
+      }
+    } catch {}
+
+    return {
+      score: scoreNum,
+      summary,
+      reportNum,
+      appN,
+      reportUrl,
+      tone: scoreTone(scoreNum),
+      company: matched.company,
+      role: matched.role,
+      status: matched.status,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if the given job URL has already been evaluated before with a valid score,
+ * checking local extension history first, then falling back to the backend pipeline.
+ * Only returns an existing evaluation if a valid numeric score is present!
+ */
+async function checkExistingEvaluation(url) {
+  if (!url) return null;
+
+  // 1. Check local session history first (must have a valid score)
+  const localSession = await findEvaluatedSession(url);
+  if (localSession && typeof localSession.evalResult?.score === "number" && !Number.isNaN(localSession.evalResult.score) && localSession.evalResult.score > 0) {
+    return { source: "local", session: localSession };
+  }
+
+  // 2. Check remote backend pipeline (tracker / reports — must have a valid score)
+  const remote = await findRemoteEvaluatedApplication(url);
+  if (remote && typeof remote.score === "number" && !Number.isNaN(remote.score) && remote.score > 0) {
+    const session = {
+      id: createSessionId(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      title: remote.company ? `${remote.company} — ${remote.role || "Evaluation"}` : deriveTitle({ capture: { url } }),
+      capture: {
+        url,
+        title: remote.company && remote.role ? `${remote.company} — ${remote.role}` : "",
+        text: "",
+        isListingUrl: false,
+      },
+      evalState: "result",
+      evalResult: {
+        score: remote.score,
+        summary: remote.summary,
+        reportNum: remote.reportNum,
+        appN: remote.appN,
+        reportUrl: remote.reportUrl,
+        tone: remote.tone,
+      },
+      messages: [],
+      history: [],
+    };
+    await saveSession(session);
+    return { source: "remote", session };
+  }
+
+  return null;
+}
+
+async function startEvaluate(capture, { force = false } = {}) {
   if (!cliId) {
     els.errorText.textContent = "No CLI configured yet — open the extension's Options page to pick one.";
     setEvalState("error");
     return;
   }
+
+  // If already evaluated and not forcing a re-evaluation, show existing results immediately:
+  if (!force && capture?.url) {
+    const existing = await checkExistingEvaluation(capture.url);
+    if (existing?.session) {
+      await loadAndRestoreSession(existing.session);
+      showCachedNotice();
+      return;
+    }
+  }
+
+  hideCachedNotice();
   els.resultActions.classList.add("hidden");
   setEvalState("evaluating");
   els.statusText.textContent = "Starting…";
   evalController = new AbortController();
+
+  let jdText = capture?.text || "";
+  if (!jdText && chrome.tabs && chrome.scripting) {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const activeTab = tabs[0];
+      const targetTabId = capture?.tabId || (activeTab?.url === capture?.url ? activeTab?.id : null);
+      if (targetTabId) {
+        const [{ result }] = await chrome.scripting.executeScript({
+          target: { tabId: targetTabId },
+          func: () => document.body?.innerText || "",
+        });
+        if (result && result.trim()) {
+          jdText = result.trim().slice(0, 20000);
+          if (capture) capture.text = jdText;
+        }
+      }
+    } catch {
+      // Fallback: server will fetch via headless WebFetch if not available from tab
+    }
+  }
+
   runEvaluate({
     serverUrl,
     cliId,
     url: capture.url,
     // The tab is already rendered and often login-walled; send its text so the
     // server never has to (and can't) re-fetch it.
-    jdText: capture.text,
+    jdText,
     signal: evalController.signal,
     onStatus: (label) => {
       els.statusText.textContent = label;
     },
     onDone: ({ score, summary, reportNum, appN, reportUrl }) => {
       evalController = null;
-      const tone = scoreTone(score);
-      els.scoreBadge.className = tone;
-      els.scoreBadge.textContent = score != null ? `${score}/5` : "No score";
-      els.resultSummary.textContent = summary || (score == null ? "The report didn't contain a recognizable VERDICT line." : "");
-      if (reportUrl) {
-        els.openReport.href = reportUrl;
-        els.openReport.classList.remove("hidden");
+      hideCachedNotice();
+      if (score != null && typeof score === "number" && !Number.isNaN(score) && score > 0) {
+        const tone = scoreTone(score);
+        els.scoreBadge.className = tone;
+        els.scoreBadge.textContent = `${score}/5`;
+        els.resultSummary.textContent = summary || "";
+        if (reportUrl) {
+          els.openReport.href = reportUrl;
+          els.openReport.classList.remove("hidden");
+        } else {
+          els.openReport.classList.add("hidden");
+        }
+        wireResultActions({ reportNum, appN, url: capture.url, tabId: capture.tabId });
+        setEvalState("result");
+        updateCurrentSession({
+          capture,
+          evalState: "result",
+          evalResult: { score, summary, reportNum, appN, reportUrl, tone },
+          title: deriveTitle({ capture, evalResult: { score, summary } }),
+        });
       } else {
-        els.openReport.classList.add("hidden");
+        els.errorText.textContent = "Evaluation finished, but no numeric score was produced. Please retry.";
+        setEvalState("error");
+        updateCurrentSession({ evalState: "error" });
       }
-      wireResultActions({ reportNum, appN, url: capture.url, tabId: capture.tabId });
-      setEvalState("result");
     },
     onError: (msg) => {
       evalController = null;
       els.errorText.textContent = msg;
       setEvalState("error");
+      updateCurrentSession({ evalState: "error" });
     },
     onAborted: () => {
       evalController = null;
       els.errorText.textContent = "Evaluation stopped.";
       setEvalState("error");
+      updateCurrentSession({ evalState: "error" });
     },
   });
 }
@@ -210,6 +403,10 @@ function panelLink(href, label) {
   a.rel = "noopener";
   a.className = "panel-link";
   a.textContent = label;
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (href) chrome.tabs.create({ url: href });
+  });
   return a;
 }
 
@@ -388,6 +585,16 @@ function showStatusSelect(appN) {
   wrap.appendChild(select);
   wrap.appendChild(saved);
   els.actionPanelBody.appendChild(wrap);
+  if (appN) {
+    fetch(`${serverUrl}/api/report?n=${encodeURIComponent(appN)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.app?.status && CANONICAL_STATES.includes(data.app.status)) {
+          select.value = data.app.status;
+        }
+      })
+      .catch(() => {});
+  }
   select.addEventListener("change", async () => {
     saved.textContent = "Saving…";
     try {
@@ -772,10 +979,446 @@ els.actionPanelStop.addEventListener("click", () => actionController?.abort());
 
 els.evaluateAnyway.addEventListener("click", () => startEvaluate(activeCapture));
 els.retry.addEventListener("click", () => activeCapture && startEvaluate(activeCapture));
-els.stopEval.addEventListener("click", () => evalController?.abort());
+els.stopEval.addEventListener("click", () => {
+  if (evalController) {
+    evalController.abort();
+    evalController = null;
+  }
+  els.errorText.textContent = "Evaluation stopped.";
+  setEvalState("error");
+  if (currentSession) {
+    currentSession.evalState = "error";
+    saveSession(currentSession);
+  }
+});
+
+els.openReport.addEventListener("click", (e) => {
+  e.preventDefault();
+  if (els.openReport.href) {
+    chrome.tabs.create({ url: els.openReport.href });
+  }
+});
+
+// Ensure all external web links inside the sidepanel open in a new browser tab.
+// In Chrome MV3 side panels, default anchor navigation is blocked/ignored.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a");
+  if (!a || !a.href) return;
+  if (/^https?:\/\//i.test(a.href)) {
+    e.preventDefault();
+    chrome.tabs.create({ url: a.href });
+  }
+});
+
+// ── session persistence & history management ─────────────────────────────
+async function updateCurrentSession(partial) {
+  if (!currentSession) {
+    if (!partial?.capture && !partial?.evalResult && !partial?.messages?.length && !partial?.history?.length) {
+      return;
+    }
+    currentSessionId = currentSessionId || createSessionId();
+    currentSession = {
+      id: currentSessionId,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      title: "New Conversation",
+      messages: sessionMessages,
+      history: history,
+      evalState: "idle",
+      evalResult: null,
+      capture: activeCapture,
+    };
+  }
+  Object.assign(currentSession, partial, { updatedAt: Date.now() });
+  if (partial.title) currentSession.title = partial.title;
+  else if (!currentSession.title || currentSession.title === "New Conversation") {
+    currentSession.title = deriveTitle(currentSession);
+  }
+  currentSession.messages = sessionMessages;
+  currentSession.history = history;
+  currentSession.capture = activeCapture;
+  const saved = await saveSession(currentSession);
+  currentSession = saved;
+  currentSessionId = saved.id;
+  updateHistoryBadge();
+}
+
+function resetActiveSessionState() {
+  if (evalController) {
+    evalController.abort();
+    evalController = null;
+  }
+  if (actionController) {
+    actionController.abort();
+    actionController = null;
+  }
+  currentSessionId = null;
+  currentSession = null;
+  sessionMessages = [];
+  history = [];
+  activeCapture = null;
+  resetActionPanel();
+  clearAttachment();
+  if (els.messages) els.messages.textContent = "";
+  setEvalState("idle");
+}
+
+async function startNewSession() {
+  resetActiveSessionState();
+  currentSessionId = createSessionId();
+  currentSession = {
+    id: currentSessionId,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    title: "New Conversation",
+    capture: null,
+    evalState: "idle",
+    evalResult: null,
+    messages: [],
+    history: [],
+  };
+  await setActiveSessionId(currentSessionId);
+  closeHistoryView();
+  updateHistoryBadge();
+}
+
+async function startNewSessionWithCapture(capture) {
+  if (capture?.url) {
+    const existing = await checkExistingEvaluation(capture.url);
+    if (existing?.session) {
+      activeCapture = capture;
+      await loadAndRestoreSession(existing.session);
+      showCachedNotice();
+      return;
+    }
+  }
+
+  resetActiveSessionState();
+  currentSessionId = createSessionId();
+  const state = capture.isListingUrl ? "listing-warning" : "captured";
+  activeCapture = capture;
+  renderCapture(capture);
+  setEvalState(state);
+  hideCachedNotice();
+
+  currentSession = {
+    id: currentSessionId,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    title: deriveTitle({ capture }),
+    capture,
+    evalState: state,
+    evalResult: null,
+    messages: [],
+    history: [],
+  };
+  await setActiveSessionId(currentSessionId);
+  closeHistoryView();
+  updateHistoryBadge();
+}
+
+async function loadAndRestoreSession(session) {
+  if (!session) return;
+  currentSessionId = session.id;
+  currentSession = session;
+  sessionMessages = [...(session.messages || [])];
+  history = [...(session.history || [])];
+  activeCapture = session.capture || null;
+  await setActiveSessionId(session.id);
+
+  resetActionPanel();
+  clearAttachment();
+  els.messages.textContent = "";
+
+  if (session.capture) {
+    renderCapture(session.capture);
+  }
+
+  if (session.evalResult && session.evalState === "result") {
+    let { score, summary, reportNum, appN, reportUrl, tone } = session.evalResult;
+
+    // Self-heal check if score is missing or invalid:
+    if ((score == null || typeof score !== "number" || Number.isNaN(score) || score <= 0) && session.capture?.url) {
+      try {
+        const remote = await findRemoteEvaluatedApplication(session.capture.url);
+        if (remote && typeof remote.score === "number" && !Number.isNaN(remote.score) && remote.score > 0) {
+          score = remote.score;
+          summary = summary || remote.summary;
+          reportNum = reportNum || remote.reportNum;
+          appN = appN || remote.appN;
+          reportUrl = reportUrl || remote.reportUrl;
+          tone = remote.tone;
+          session.evalResult = { score, summary, reportNum, appN, reportUrl, tone };
+          await saveSession(session);
+        }
+      } catch {}
+    }
+
+    if (score != null && typeof score === "number" && !Number.isNaN(score) && score > 0) {
+      const effectiveTone = tone || scoreTone(score);
+      els.scoreBadge.className = effectiveTone;
+      els.scoreBadge.textContent = `${score}/5`;
+      els.resultSummary.textContent = summary || "";
+      if (reportUrl) {
+        els.openReport.href = reportUrl;
+        els.openReport.classList.remove("hidden");
+      } else {
+        els.openReport.classList.add("hidden");
+      }
+      wireResultActions({
+        reportNum,
+        appN,
+        url: session.capture?.url,
+        tabId: session.capture?.tabId,
+      });
+      setEvalState("result");
+      showCachedNotice();
+    } else {
+      // Scanned or opened before, but has no valid score!
+      // Do NOT show "No score" result card!
+      hideCachedNotice();
+      if (session.capture) {
+        renderCapture(session.capture);
+        setEvalState(session.capture.isListingUrl ? "listing-warning" : "captured");
+      } else {
+        setEvalState("idle");
+      }
+    }
+  } else if (session.evalState && session.evalState !== "idle") {
+    hideCachedNotice();
+    if (session.evalState === "evaluating") {
+      // An evaluation cannot continue running after sidepanel reload without an active controller!
+      // Check if remote pipeline completed the evaluation while we were away:
+      let restored = false;
+      if (session.capture?.url) {
+        try {
+          const remote = await findRemoteEvaluatedApplication(session.capture.url);
+          if (remote && typeof remote.score === "number" && !Number.isNaN(remote.score) && remote.score > 0) {
+            session.evalResult = remote;
+            session.evalState = "result";
+            await saveSession(session);
+            const tone = remote.tone || scoreTone(remote.score);
+            els.scoreBadge.className = tone;
+            els.scoreBadge.textContent = `${remote.score}/5`;
+            els.resultSummary.textContent = remote.summary || "";
+            if (remote.reportUrl) {
+              els.openReport.href = remote.reportUrl;
+              els.openReport.classList.remove("hidden");
+            } else {
+              els.openReport.classList.add("hidden");
+            }
+            wireResultActions({
+              reportNum: remote.reportNum,
+              appN: remote.appN,
+              url: session.capture.url,
+              tabId: session.capture.tabId,
+            });
+            setEvalState("result");
+            showCachedNotice();
+            restored = true;
+          }
+        } catch {}
+      }
+      if (!restored) {
+        // If not completed remotely, reset to captured so it does not stay in a zombie spinning state!
+        session.evalState = session.capture?.isListingUrl ? "listing-warning" : (session.capture ? "captured" : "idle");
+        await saveSession(session);
+        setEvalState(session.evalState);
+      }
+    } else {
+      setEvalState(session.evalState);
+    }
+  } else {
+    hideCachedNotice();
+    setEvalState("idle");
+  }
+
+  if (Array.isArray(session.messages)) {
+    for (const msg of session.messages) {
+      addMessage(msg.role, msg.text, msg.imageDataUrl, /* isRestoring */ true);
+    }
+  }
+
+  els.scrollArea.scrollTop = els.scrollArea.scrollHeight;
+  closeHistoryView();
+  updateHistoryBadge();
+}
+
+// ── history UI ───────────────────────────────────────────────────────────
+async function openHistoryView() {
+  els.historyView.classList.remove("hidden");
+  if (els.historySearch) els.historySearch.value = "";
+  if (els.historyClearConfirm) els.historyClearConfirm.classList.add("hidden");
+  if (els.btnClearHistory) els.btnClearHistory.classList.remove("hidden");
+  await renderHistoryList();
+}
+
+function closeHistoryView() {
+  els.historyView.classList.add("hidden");
+  if (els.historyClearConfirm) els.historyClearConfirm.classList.add("hidden");
+  if (els.btnClearHistory) els.btnClearHistory.classList.remove("hidden");
+}
+
+async function toggleHistoryView() {
+  if (els.historyView.classList.contains("hidden")) {
+    await openHistoryView();
+  } else {
+    closeHistoryView();
+  }
+}
+
+async function renderHistoryList(filterQuery = "") {
+  const sessions = await loadSessions();
+  els.historyList.textContent = "";
+
+  if (els.btnClearHistory) {
+    els.btnClearHistory.disabled = sessions.length === 0;
+  }
+
+  const q = filterQuery.trim().toLowerCase();
+  const filtered = sessions.filter((s) => {
+    if (!q) return true;
+    if (s.title && s.title.toLowerCase().includes(q)) return true;
+    if (s.capture?.url && s.capture.url.toLowerCase().includes(q)) return true;
+    if (s.capture?.title && s.capture.title.toLowerCase().includes(q)) return true;
+    if (s.evalResult?.summary && s.evalResult.summary.toLowerCase().includes(q)) return true;
+    if (s.messages?.some((m) => m.text && m.text.toLowerCase().includes(q))) return true;
+    return false;
+  });
+
+  if (filtered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = q
+      ? "No past sessions match your search."
+      : "No saved conversations or evaluations yet. Evaluated job postings and chats will appear here so you can return to them anytime.";
+    els.historyList.appendChild(empty);
+    return;
+  }
+
+  for (const s of filtered) {
+    const item = document.createElement("div");
+    item.className = "history-item" + (s.id === currentSessionId ? " active" : "");
+    item.dataset.id = s.id;
+
+    const top = document.createElement("div");
+    top.className = "history-item-top";
+
+    const title = document.createElement("div");
+    title.className = "history-item-title";
+    title.textContent = s.title || "Untitled Session";
+    top.appendChild(title);
+
+    if (s.evalResult?.score != null) {
+      const scoreBadge = document.createElement("span");
+      scoreBadge.className = `history-item-score ${scoreTone(s.evalResult.score)}`;
+      scoreBadge.textContent = `${s.evalResult.score}/5`;
+      top.appendChild(scoreBadge);
+    }
+    item.appendChild(top);
+
+    let snippetText = "";
+    if (s.evalResult?.summary) {
+      snippetText = s.evalResult.summary;
+    } else if (s.messages?.length) {
+      const lastMsg = s.messages[s.messages.length - 1];
+      snippetText = `${lastMsg.role === "user" ? "You" : "AI"}: ${lastMsg.text || ""}`;
+    } else if (s.capture?.url) {
+      snippetText = s.capture.url;
+    }
+    if (snippetText) {
+      const snippet = document.createElement("div");
+      snippet.className = "history-item-snippet";
+      snippet.textContent = snippetText;
+      item.appendChild(snippet);
+    }
+
+    const btm = document.createElement("div");
+    btm.className = "history-item-bottom";
+
+    const time = document.createElement("span");
+    time.className = "history-item-time";
+    time.textContent = formatSessionTime(s.updatedAt || s.createdAt);
+    btm.appendChild(time);
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "history-item-del";
+    delBtn.dataset.id = s.id;
+    delBtn.title = "Delete this session";
+    delBtn.setAttribute("aria-label", "Delete this session");
+    delBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+      </svg>
+    `;
+    btm.appendChild(delBtn);
+
+    item.appendChild(btm);
+    els.historyList.appendChild(item);
+  }
+}
+
+async function handleDeleteSession(sessionId, delBtn) {
+  const item = delBtn?.closest(".history-item");
+  if (item) {
+    item.style.opacity = "0.4";
+    item.style.pointerEvents = "none";
+  }
+  try {
+    await deleteSession(sessionId);
+    if (sessionId === currentSessionId) {
+      resetActiveSessionState();
+    }
+  } catch (err) {
+    console.error("Failed to delete session:", err);
+    if (item) {
+      item.style.opacity = "";
+      item.style.pointerEvents = "";
+    }
+  } finally {
+    await renderHistoryList(els.historySearch?.value || "");
+    await updateHistoryBadge();
+  }
+}
+
+els.historyList.addEventListener("click", async (e) => {
+  const delBtn = e.target.closest(".history-item-del");
+  if (delBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const sessionId = delBtn.dataset.id;
+    if (!sessionId) return;
+    await handleDeleteSession(sessionId, delBtn);
+    return;
+  }
+
+  const item = e.target.closest(".history-item");
+  if (item) {
+    const sessionId = item.dataset.id;
+    if (!sessionId) return;
+    const session = await getSession(sessionId);
+    if (session) {
+      await loadAndRestoreSession(session);
+    }
+  }
+});
+
+async function updateHistoryBadge() {
+  try {
+    const list = await loadSessions();
+    if (els.historyBadge) {
+      els.historyBadge.textContent = String(list.length);
+      els.historyBadge.classList.toggle("hidden", list.length === 0);
+    }
+  } catch {}
+}
 
 // ── chat (follow-up questions, unchanged behavior) ──────────────────────
-function addMessage(role, text, imageDataUrl) {
+function addMessage(role, text, imageDataUrl, isRestoring = false) {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
   if (imageDataUrl) {
@@ -791,7 +1434,23 @@ function addMessage(role, text, imageDataUrl) {
   div.appendChild(textNode);
   els.messages.appendChild(div);
   els.scrollArea.scrollTop = els.scrollArea.scrollHeight;
+
+  if (!isRestoring) {
+    sessionMessages.push({ role, text, imageDataUrl, timestamp: Date.now() });
+    updateCurrentSession({ messages: sessionMessages });
+  }
+
   return div;
+}
+
+function updateLastAssistantMessage(text) {
+  for (let i = sessionMessages.length - 1; i >= 0; i--) {
+    if (sessionMessages[i].role === "assistant") {
+      sessionMessages[i].text = text;
+      break;
+    }
+  }
+  updateCurrentSession({ messages: sessionMessages });
 }
 
 // ── image attachments (file picker, paste, or a tab screenshot) ────────────
@@ -899,11 +1558,29 @@ async function executeEnvelope(env) {
   // as the same `input` string.
   const evalInput = args.url || args.text;
   if (env.id === "evaluate" && evalInput) {
+    if (args.url) {
+      const existing = await checkExistingEvaluation(args.url);
+      if (existing?.session) {
+        const res = existing.session.evalResult;
+        const scoreStr = res?.score != null ? `${res.score}/5` : "Evaluated";
+        const sumStr = res?.summary ? ` — ${res.summary}` : "";
+        addActionLink(`Previously evaluated: ${scoreStr}${sumStr} (Click to view)`, async () => {
+          await loadAndRestoreSession(existing.session);
+          showCachedNotice();
+        });
+        if (res?.reportUrl) {
+          addActionLink(`Open report → ${res.reportUrl}`, () => chrome.tabs.create({ url: res.reportUrl }));
+        }
+        return;
+      }
+    }
     const link = addActionLink(args.url ? `Evaluating ${args.url}…` : "Evaluating the pasted job description…", () => {});
+    const capturedText = activeCapture?.url === evalInput ? activeCapture?.text : (!args.url ? evalInput : undefined);
     runEvaluate({
       serverUrl,
       cliId,
       url: evalInput,
+      jdText: capturedText,
       onStatus: (label) => {
         link.textContent = label;
       },
@@ -983,6 +1660,8 @@ async function sendChat(message) {
       assistantDiv.textContent = `${assistantDiv.textContent}\n\n[connection lost while streaming]`;
     }
     history.push({ role: "assistant", content: assistantDiv.textContent });
+    updateLastAssistantMessage(assistantDiv.textContent);
+    updateCurrentSession({ history });
   } finally {
     chatBusy = false;
     els.input.disabled = false;
@@ -1010,16 +1689,78 @@ els.input.addEventListener("keydown", (e) => {
 // document loaded (handled once, in init(), below), and any capture that
 // arrives WHILE this panel is already open, which only chrome.storage's
 // change event can tell us about.
-function handleCapture(capture) {
+async function handleCapture(capture) {
   activeCapture = capture;
+
+  if (capture?.url) {
+    const existing = await checkExistingEvaluation(capture.url);
+    if (existing?.session) {
+      await loadAndRestoreSession(existing.session);
+      showCachedNotice();
+      return;
+    }
+  }
+
+  if (currentSession && (currentSession.evalResult || (sessionMessages && sessionMessages.length > 0))) {
+    await startNewSessionWithCapture(capture);
+    return;
+  }
+
   renderCapture(capture);
-  // Capturing a posting no longer auto-starts an evaluation — it stops here
-  // and shows action buttons so the user decides what to do with it.
-  setEvalState(capture.isListingUrl ? "listing-warning" : "captured");
+  const state = capture.isListingUrl ? "listing-warning" : "captured";
+  setEvalState(state);
+  hideCachedNotice();
+  updateCurrentSession({
+    capture,
+    evalState: state,
+    title: deriveTitle({ capture }),
+  });
 }
+
+els.btnHistory.addEventListener("click", toggleHistoryView);
+els.btnCloseHistory.addEventListener("click", closeHistoryView);
+els.btnNewChat.addEventListener("click", startNewSession);
+els.historySearch.addEventListener("input", (e) => renderHistoryList(e.target.value));
+els.btnClearHistory.addEventListener("click", () => {
+  els.btnClearHistory.classList.add("hidden");
+  els.historyClearConfirm.classList.remove("hidden");
+});
+
+els.btnCancelClear.addEventListener("click", () => {
+  els.historyClearConfirm.classList.add("hidden");
+  els.btnClearHistory.classList.remove("hidden");
+});
+
+els.btnConfirmClear.addEventListener("click", async () => {
+  if (els.historyList) {
+    els.historyList.style.opacity = "0.4";
+    els.historyList.style.pointerEvents = "none";
+  }
+  try {
+    resetActiveSessionState();
+    await clearAllSessions();
+  } catch (err) {
+    console.error("Failed to clear history:", err);
+  } finally {
+    if (els.historyList) {
+      els.historyList.style.opacity = "";
+      els.historyList.style.pointerEvents = "";
+    }
+    els.historyClearConfirm.classList.add("hidden");
+    els.btnClearHistory.classList.remove("hidden");
+    await renderHistoryList(els.historySearch?.value || "");
+    await updateHistoryBadge();
+  }
+});
 
 els.captureEvaluate.addEventListener("click", () => startEvaluate(activeCapture));
 els.captureFill.addEventListener("click", () => activeCapture && draftFormForUrl(activeCapture.url, activeCapture.tabId));
+els.btnReevaluate?.addEventListener("click", () => {
+  const cap = activeCapture || currentSession?.capture;
+  if (cap) {
+    startEvaluate(cap, { force: true });
+  }
+});
 
 /** Current tab's URL for the landing buttons — undefined when there isn't one
  *  (chrome:// pages, an extension page, a tab mid-navigation). */
@@ -1037,7 +1778,7 @@ els.landingEvaluate.addEventListener("click", async () => {
   // isListingUrl defaults false here — the landing button is a deliberate
   // "evaluate whatever's on this tab" click, not the content script's own
   // listing-page heuristic (lib/extract.js), so it's not re-run client-side.
-  handleCapture({ url: tab.url, title: tab.title || "", text: "", isListingUrl: false, tabId: tab.id });
+  await handleCapture({ url: tab.url, title: tab.title || "", text: "", isListingUrl: false, tabId: tab.id });
 });
 
 els.landingApply.addEventListener("click", async () => {
@@ -1049,13 +1790,19 @@ els.landingApply.addEventListener("click", async () => {
   draftFormForUrl(tab.url, tab.id);
 });
 
-function submitLandingUrl() {
+async function submitLandingUrl() {
   const url = els.landingUrlInput.value.trim();
   if (!/^https?:\/\//i.test(url)) {
     addMessage("assistant", "That doesn't look like a link (needs to start with http:// or https://).");
     return;
   }
   els.landingUrlInput.value = "";
+  const existing = await checkExistingEvaluation(url);
+  if (existing?.session) {
+    await loadAndRestoreSession(existing.session);
+    showCachedNotice();
+    return;
+  }
   draftFormForUrl(url);
 }
 els.landingUrlFill.addEventListener("click", submitLandingUrl);
@@ -1063,12 +1810,12 @@ els.landingUrlInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") submitLandingUrl();
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
+chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== "session") return;
   if (changes.pendingCapture?.newValue) {
     const capture = changes.pendingCapture.newValue;
     chrome.storage.session.remove("pendingCapture");
-    handleCapture(capture);
+    await handleCapture(capture);
   }
   if (changes.pendingScreenshot?.newValue) {
     const shot = changes.pendingScreenshot.newValue;
@@ -1088,11 +1835,27 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
   if (pendingScreenshot) handleScreenshot(pendingScreenshot);
 
-  if (!pendingCapture) {
-    setEvalState("idle");
-    if (!cliId) addMessage("assistant", "No CLI configured yet — open the extension's Options page to pick one.");
+  if (pendingCapture) {
+    await handleCapture(pendingCapture);
     return;
   }
 
-  handleCapture(pendingCapture);
+  // Restore the active or most recent session so closing the sidepanel never loses work:
+  const activeId = await getActiveSessionId();
+  let sessionToRestore = null;
+  if (activeId) {
+    sessionToRestore = await getSession(activeId);
+  }
+  if (!sessionToRestore) {
+    const all = await loadSessions();
+    if (all.length > 0) sessionToRestore = all[0];
+  }
+
+  if (sessionToRestore) {
+    await loadAndRestoreSession(sessionToRestore);
+  } else {
+    setEvalState("idle");
+    if (!cliId) addMessage("assistant", "No CLI configured yet — open the extension's Options page to pick one.");
+  }
+  updateHistoryBadge();
 })();

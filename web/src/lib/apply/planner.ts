@@ -65,11 +65,16 @@ export function runPlanner(opts: {
   const { cliId, spec, binPath, prompt, fieldCount, cwd, t0, log } = opts;
 
   const isClaude = cliId === "claude";
+  const isAntigravity = cliId === "antigravity";
   // --strict-mcp-config with no --mcp-config = load ZERO MCP servers → much
   // faster startup (skips the user's global playwright/gmail/linear/… servers
   // the planner doesn't need; it only reads local files).
+  // Similarly, Antigravity CLI uses --disable-slash-commands to skip slash command
+  // and skill expansion during headless form drafting.
   const args = isClaude
     ? ["-p", prompt, "--permission-mode", "acceptEdits", "--strict-mcp-config", "--allowedTools", ADVISOR_SCOPE.allowed, "--disallowedTools", ADVISOR_SCOPE.disallowed]
+    : isAntigravity
+    ? ["--disable-slash-commands", ...spec.args(prompt)]
     : spec.args(prompt);
   // A runtime with no verified fencing mechanism plans with its default access.
   // log() is the caller's non-fatal channel; it surfaces in the collapsed

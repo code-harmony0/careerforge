@@ -115,6 +115,19 @@ export function isFatalClaudeStderr(line) {
   return FATAL_AUTH_STDERR_RE.test(line) || CLAUDE_FATAL_STDERR_RE.test(line) || isFatalQuotaStderr(line);
 }
 
+/** Antigravity-specific fatal stderr patterns. */
+const ANTIGRAVITY_FATAL_STDERR_RE = /not logged into antigravity|auto-denied|\bdenied\b/i;
+
+/**
+ * Whether one Antigravity CLI stderr chunk should be treated as a fatal error.
+ *
+ * @param {string} line
+ * @returns {boolean}
+ */
+export function isFatalAntigravityStderr(line) {
+  return FATAL_AUTH_STDERR_RE.test(line) || isFatalQuotaStderr(line) || ANTIGRAVITY_FATAL_STDERR_RE.test(line);
+}
+
 /**
  * Fallback classifier for a CLI with no `stderrIsFatal` of its own.
  *
@@ -359,6 +372,81 @@ export function parseGrokEvent(line) {
     // figure already reported; grok sends the real number only on `end`.
     result.costUsd = typeof ev.total_cost_usd === "number" ? ev.total_cost_usd : null;
     return result;
+  }
+
+  return null;
+}
+
+/**
+ * The argv that makes Antigravity CLI emit the JSONL `parseAntigravityEvent` reads.
+ *
+ * @param {string} prompt
+ * @returns {string[]}
+ */
+export function antigravityStreamArgs(prompt) {
+  return ["--disable-slash-commands", "-p", prompt, "--output-format", "stream-json"];
+}
+
+/**
+ * Convert one Antigravity CLI `--output-format stream-json` line into dashboard-friendly data.
+ * @param {string} line
+ * @returns {ParsedEvent | null}
+ */
+export function parseAntigravityEvent(line) {
+  let ev;
+  try {
+    ev = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (!ev || typeof ev !== "object") return null;
+
+  if (ev.event === "init") {
+    return { status: STATUS_READY };
+  }
+
+  if (ev.event === "step_update") {
+    const step = ev.step_update;
+    if (!step || typeof step !== "object") return null;
+
+    if (step.step_type === "tool" && (step.state === "ACTIVE" || (!step.state && step.tool_name))) {
+      const name = step.tool_name;
+      if (name === "run_command") return { tool: "Bash" };
+      if (name === "search_web") return { tool: "WebSearch" };
+      if (name === "read_file" || name === "view_file") return { tool: "Read" };
+      if (name === "write_to_file" || name === "replace_file_content" || name === "sed_file") return { tool: "Write" };
+      return { tool: typeof name === "string" && name ? name : "Working" };
+    }
+
+    if (step.step_type === "agent_response") {
+      if (typeof step.text_delta === "string" && step.text_delta !== "") {
+        return { text: step.text_delta };
+      }
+    }
+
+    return null;
+  }
+
+  if (ev.event === "result") {
+    const res = ev.result;
+    const result = {};
+    if (res?.usage) {
+      const usage = res.usage;
+      const fresh = Math.max(0, tokenCount(usage.input_tokens) - tokenCount(usage.cache_read_tokens));
+      result.tokens = fresh + tokenCount(usage.output_tokens);
+      result.tokensAreTotal = true;
+      result.costUsd = null;
+    }
+    if (res?.status && res.status !== "SUCCESS") {
+      const msg = res.error || res.message || `Antigravity CLI failed with status ${res.status}`;
+      result.error = String(msg);
+    }
+    return Object.keys(result).length > 0 ? result : null;
+  }
+
+  if (ev.event === "error") {
+    const message = String(ev.error?.message || ev.message || "Antigravity failed before finishing");
+    return { error: message };
   }
 
   return null;
