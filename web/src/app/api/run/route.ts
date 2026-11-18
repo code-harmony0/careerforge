@@ -396,9 +396,6 @@ export async function POST(req: Request) {
 
       const cvFilter = kind === "pdf" ? createCvEnvelopeFilter() : null;
       const reportFilter = kind === "evaluate" ? createReportEnvelopeFilter() : null;
-<<<<<<< HEAD
-
-=======
       // Assistant-authored text only, before report-body filtering. Tools/JDs
       // cannot directly declare a gated outcome. Process integrity is checked
       // first at close, before this text can be treated as a terminal stop.
@@ -411,7 +408,6 @@ export async function POST(req: Request) {
       // and the PDF renders correctly server-side. Emit a throttled keepalive so
       // the stream never idles during the filtered phase. Unknown event types are
       // ignored by the client's switch, so this is safe for older tabs too.
->>>>>>> upstream/main
       const sendAgentText = (text: string) => {
         if (kind === "evaluate") evaluationText += text;
         const filter = cvFilter ?? reportFilter;
@@ -422,15 +418,9 @@ export async function POST(req: Request) {
       const sendWarnings = (warnings: string[]) => {
         for (const w of warnings) send({ type: "text", text: `⚠️ ${w}\n` });
       };
-<<<<<<< HEAD
-
-      const saveCv = (paths: PdfPaths, envelope: CvEnvelope) => {
-        const written = writeCvHtml({ pdfPaths: paths, html: envelope.html });
-=======
       /** Persist the emitted CV; streams the reason and returns false on failure. */
       const saveCv = (paths: PdfPaths, cv: { html: string }) => {
         const written = writeCvHtml({ pdfPaths: paths, html: cv.html });
->>>>>>> upstream/main
         if (!written.ok) send({ type: "error", msg: written.error.slice(0, 200) });
         return written.ok;
       };
@@ -545,12 +535,7 @@ export async function POST(req: Request) {
           close();
         }
       };
-<<<<<<< HEAD
-
-      const renderPdf = async (paths: PdfPaths, format: "letter" | "a4") => {
-=======
       const renderPdf = async (paths: PdfPaths, format: "letter" | "a4", ats?: { html: string; finalPdf: string } | null) => {
->>>>>>> upstream/main
         send({ type: "status", label: "Rendering PDF…" });
         try {
           const result = await renderAndMarkPdf({

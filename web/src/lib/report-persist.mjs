@@ -242,7 +242,7 @@ function spawnScript({ spawnFn, execPath, root, cwd = root, script, args = [], i
  * honesty gate as every other evaluate failure.
  *
  * @param {{spawnFn: Function, execPath: string, root: string, coreRoot?: string, markdown: string, url: string, today: string, postedAt?: string, evaluationSections?: string[]}} args
- * @returns {Promise<{ok: true, num: string, reportFile: string, warnings: string[]} | {ok: false, error: string}>}
+ * @returns {Promise<{ok: true, num: string, reportFile: string, warnings: string[], score?: string, summary?: string, company?: string, role?: string} | {ok: false, error: string}>}
  */
 export async function persistEvaluation({ spawnFn, execPath, root, coreRoot = root, markdown, url, today, postedAt, evaluationSections = undefined }) {
   const evaluation = parseEvaluationOptions(evaluationSections);

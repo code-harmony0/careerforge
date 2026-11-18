@@ -7,6 +7,7 @@ import rehypeSlug from "rehype-slug";
 import { Check, Copy, Maximize2, Minimize2, Printer, List } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { remarkCleanInterviewHeadings } from "@/lib/interview-doc.mjs";
+import { noMarkdownImages } from "@/lib/markdown-options.mjs";
 
 // The reader for a finished prep brief or plan.
 //
@@ -165,7 +166,7 @@ export function PrepDocument({ markdown, title, subtitle, kindLabel, actions }: 
   const hasRail = outline.length > 1;
   const body = useMemo(
     () => (
-      <ReactMarkdown remarkPlugins={REMARK} rehypePlugins={REHYPE} components={markdownComponents}>
+      <ReactMarkdown remarkPlugins={REMARK} rehypePlugins={REHYPE} components={markdownComponents} {...noMarkdownImages}>
         {markdown}
       </ReactMarkdown>
     ),

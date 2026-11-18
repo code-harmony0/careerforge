@@ -480,10 +480,18 @@ function AlreadySaved({ slug, onOpen }: { slug: string | null; onOpen?: (slug: s
 }
 
 /** One numbered step in link mode's evaluate → prep chain. */
-function ChainStep({ n, label, status }: { n: number; label: string; status: "running" | "done" | "error" | "pending" }) {
+function ChainStep({ n, label, status }: { n: number; label: string; status: "running" | "done" | "error" | "pending" | "gated" }) {
   const tone =
-    status === "done" ? "text-emerald-500" : status === "error" ? "text-red-400" : status === "running" ? "text-brand-text" : "text-faint";
-  const mark = status === "done" ? "✓" : status === "error" ? "✕" : String(n);
+    status === "done"
+      ? "text-emerald-500"
+      : status === "error"
+      ? "text-red-400"
+      : status === "gated"
+      ? "text-amber-500"
+      : status === "running"
+      ? "text-brand-text"
+      : "text-faint";
+  const mark = status === "done" ? "✓" : status === "error" ? "✕" : status === "gated" ? "!" : String(n);
   return (
     <li className="flex items-center gap-2">
       <span className={cn("inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-current text-[9px] font-bold", tone)}>

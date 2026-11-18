@@ -120,7 +120,7 @@ function completeMarker(re, s) {
  * Streaming companion to parseReportEnvelope: accumulates the agent's full
  * output for parsing while keeping the envelope body out of the run log.
  *
- * @returns {{push: (chunk: string) => string, flush: () => string, result: () => (ReportEnvelope | {ok: false, error: string})}}
+ * @returns {{push: (chunk: string) => string, flush: () => string, result: () => (ReportEnvelope | {ok: false, error: string}), rawText: () => string}}
  */
 export function createReportEnvelopeFilter() {
   let raw = "";
