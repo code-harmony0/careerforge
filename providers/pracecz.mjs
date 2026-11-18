@@ -36,11 +36,13 @@
 import { fetchTextWithRetry, sleep } from './_http.mjs';
 import { safeEncodeURIComponent } from './_safe-url.mjs';
 import { resolveProfileKeywords } from './_profile-keywords.mjs';
+import { markTruncated } from '../lib/board-truncation.mjs';
 
 const SEARCH_URL = 'https://www.prace.cz/nabidky/';
 const POSTING_URL_BASE = 'https://www.prace.cz/nabidka/';
 const PAGE_SIZE = 40;
 const DEFAULT_MAX_PAGES = 10;
+const MAX_PAGES_CAP = 1500; // hard ceiling even for a user override
 const INTER_PAGE_DELAY_MS = 1000;
 const NOT_FOUND = 'pracecz: currentPageItems/totalItems not found — page markup changed?';
 
@@ -170,12 +172,19 @@ export default {
     }
 
     const probing = Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0;
-    const configured = Number.isInteger(entry?.max_pages) && entry.max_pages > 0 ? entry.max_pages : DEFAULT_MAX_PAGES;
+
+    const configured =
+      Number.isInteger(entry?.max_pages) && entry.max_pages > 0
+        ? Math.min(entry.max_pages, MAX_PAGES_CAP)
+        : DEFAULT_MAX_PAGES;
+
     const maxPages = probing ? Math.min(configured, ctx.maxPages) : configured;
 
     /** @type {Map<string, Job>} */
     const byId = new Map();
     const errors = [];
+    // Why part of the board went unread, first cause first; null while it is whole.
+    let partialReason = null;
 
     for (const keyword of keywords) {
       let total = 0;
@@ -190,8 +199,11 @@ export default {
         } catch (err) {
           if (probing) throw err;
           const message = (err && /** @type {Error} */ (err).message) || err;
+          partialReason ??= 'fetch-error';
           if (page === 1) errors.push([keyword, message]);
-          else console.error(`⚠️  pracecz: "${keyword}" page ${page} failed (${message}) — kept ${rows} offers`);
+          else {
+            console.error(`⚠️  pracecz: "${keyword}" page ${page} failed (${message}) — kept ${rows} offers`);
+          }
           break;
         }
 
@@ -212,8 +224,12 @@ export default {
           total = totalItems;
           lastPage = Math.min(Math.ceil(total / PAGE_SIZE), maxPages);
         }
-        if (page === maxPages && Math.ceil(total / PAGE_SIZE) > maxPages && !probing) {
+        // A short page is the board's natural end even when the total read on
+        // page 1 promised more (it can shrink mid-walk): the cut needs a full
+        // page, counted in the source's items before normalization drops any.
+        if (page === maxPages && items.length >= PAGE_SIZE && Math.ceil(total / PAGE_SIZE) > maxPages && !probing) {
           console.error(`⚠️  pracecz: ${entryName} truncated at max_pages=${maxPages} (${rows} of ${total} offers for "${keyword}") — narrow the keyword, set pracecz.location, or raise max_pages`);
+          partialReason ??= 'page-cap';
         }
       }
     }
@@ -225,6 +241,12 @@ export default {
       console.error(`⚠️  pracecz: "${keyword}" page 1 failed (${message}) — keyword skipped`);
     }
 
-    return [...byId.values()];
+    const jobs = [...byId.values()];
+    // Part of the board was never read: a keyword failed on page 1 while another
+    // answered, a later page failed, or max_pages cut a keyword the source says
+    // has more. scan.mjs takes a board's health from the returned array, so the
+    // result says so; unmarked, the board is logged reachable as if fully read.
+    if (partialReason) markTruncated(jobs, partialReason, { fetched: jobs.length });
+    return jobs;
   },
 };

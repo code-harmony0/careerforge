@@ -34,12 +34,15 @@ function run(root, args = [], envExtra = { CAREER_OPS_ROOT: root }) {
   const env = { ...process.env, ...envExtra };
   for (const k of ['CAREER_OPS_DATA_DIR', 'CAREER_OPS_TRACKER', 'CAREER_OPS_ADDITIONS', 'CAREER_OPS_BATCH_STATE']) delete env[k];
   if (!('CAREER_OPS_ROOT' in envExtra)) delete env.CAREER_OPS_ROOT;
+  // The default batch-state.tsv is the checkout's, so a developer's own batch
+  // history could decide whether a fixture row merges. Name the fixture's.
+  env.CAREER_OPS_BATCH_STATE = join(root, 'batch', 'batch-state.tsv');
   const r = spawnSync(process.execPath, [join(CODE_ROOT, 'merge-tracker.mjs'), ...args], { cwd: CODE_ROOT, env, encoding: 'utf-8', timeout: 30_000 });
   assert.equal(r.error, undefined);
   return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 const tracker = (root) => readFileSync(join(root, 'data', 'applications.md'), 'utf-8');
-const withRoot = (fn) => () => { const root = makeRoot(); try { fn(root); } finally { rmSync(root, { recursive: true, force: true }); } };
+const withRoot = (fn) => (t) => { const root = makeRoot(); try { fn(root, t); } finally { rmSync(root, { recursive: true, force: true }); } };
 const WARN = /report link "[^"]*" does not resolve/;
 
 test('missing report: row is merged unchanged and a warning names it', withRoot((root) => {
@@ -107,7 +110,7 @@ test('--dry-run reports the warning and writes nothing', withRoot((root) => {
   assert.ok(existsSync(join(root, 'batch', 'tracker-additions', '001-acme-widgets.tsv')), 'TSV not archived');
 }));
 
-test('a symlinked tracker FILE: a link that resolves from the link\'s own folder does not warn (#5374)', withRoot((root) => {
+test('a symlinked tracker FILE: a link that resolves from the link\'s own folder does not warn (#5374)', withRoot((root, t) => {
   // data/applications.md links into another repo; reports/ sits next to the
   // link, not next to the target, and ../reports/ resolves from data/.
   const privateData = join(root, 'private', 'data');
@@ -115,7 +118,7 @@ test('a symlinked tracker FILE: a link that resolves from the link\'s own folder
   const real = join(privateData, 'applications.md');
   renameSync(join(root, 'data', 'applications.md'), real);
   try { symlinkSync(real, join(root, 'data', 'applications.md')); } catch (e) {
-    if (e.code === 'EPERM' || e.code === 'EACCES') return; // symlinks need privileges on some Windows setups
+    if (e.code === 'EPERM' || e.code === 'EACCES') { t.skip(`this account cannot create a symlink (${e.code})`); return; }
     throw e;
   }
   writeFileSync(join(root, 'reports', '001-acme-widgets-2026-07-15.md'), '# Eval\n**URL:** N/A\n');

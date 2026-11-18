@@ -258,6 +258,20 @@ func TestParseApplicationsResolvesTrackerRelativeReportLinks(t *testing.T) {
 	}
 }
 
+func TestNormalizeStatusSpeculative(t *testing.T) {
+	cases := map[string]string{
+		"Speculative": "speculative",
+		"speculative": "speculative",
+		"gambit":      "speculative",
+		"spec":        "speculative",
+	}
+	for in, want := range cases {
+		if got := NormalizeStatus(in); got != want {
+			t.Fatalf("NormalizeStatus(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 // A report named with parentheses must resolve whole: a `[^)]+` link regex
 // cut `001-acme-(berlin)-….md` at the first `)` (career-ops-hq/career-ops#5482).
 func TestParseApplicationsKeepsParenthesesInReportLink(t *testing.T) {
@@ -292,6 +306,41 @@ func TestParseApplicationsKeepsParenthesesInReportLink(t *testing.T) {
 	}
 	if want := filepath.Join("reports", report); apps[0].ReportPath != want {
 		t.Fatalf("expected report path %q, got %q", want, apps[0].ReportPath)
+	}
+}
+
+// A report link is a tracker cell, not a trusted path: `..` must not let it
+// resolve to a file outside the data root. Every consumer joins ReportPath
+// against careerOpsPath and reads it, and the same package already rejects
+// crafted tracker rows on the PDF path (isSafeRepoRelativePath, pdf.go).
+func TestParseApplicationsRejectsReportPathEscape(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	dataDir := filepath.Join(root, "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("failed to create data dir: %v", err)
+	}
+	// The file the escaping link would reach.
+	secret := filepath.Join(base, "secret.md")
+	if err := os.WriteFile(secret, []byte("# Not a report\n"), 0o644); err != nil {
+		t.Fatalf("failed to write file outside the data root: %v", err)
+	}
+	applications := `# Applications Tracker
+
+| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
+|---|------|---------|------|-------|--------|-----|--------|-------|
+| 1 | 2026-11-15 | Acme | Engineer | 4.0/5 | Evaluated | ❌ | [1](../../secret.md) | escaping link |
+`
+	if err := os.WriteFile(filepath.Join(dataDir, "applications.md"), []byte(applications), 0o644); err != nil {
+		t.Fatalf("failed to write applications tracker: %v", err)
+	}
+
+	apps := mustParseApplications(t, root)
+	if len(apps) != 1 {
+		t.Fatalf("expected 1 parsed application, got %d", len(apps))
+	}
+	if got := apps[0].ReportPath; got != "" {
+		t.Fatalf("a report link that escapes the data root must not resolve, got %q", got)
 	}
 }
 
@@ -410,6 +459,55 @@ func TestParseApplicationsUsesTrackerURLBeforeLegacyEnrichment(t *testing.T) {
 	}
 	if got := apps[2].JobURL; got != "https://jobs.example.com/legacy" {
 		t.Errorf("legacy JobURL = %q, want report URL fallback", got)
+	}
+}
+
+// The width a row must have comes from the header, as parseTrackerRow in
+// tracker-parse.mjs derives it, not from a fixed 8. Fixed, it dropped every row
+// of a narrower tracker without an error, and read a row that is missing an
+// interior cell with every later column shifted one to the left.
+func TestParseApplicationsRowWidthFollowsTheHeader(t *testing.T) {
+	narrow, _ := writeTracker(t, `# Applications Tracker
+
+| # | Date | Company | Role | Score | Status | Report |
+|---|---|---|---|---|---|---|
+| 1 | 2026-08-28 | Acme | Platform Engineer | 4.0/5 | Applied | — |
+| 2 | 2026-08-29 | Globex | Data Engineer | 4.2/5 | Evaluated | — |
+`)
+	apps := mustParseApplications(t, narrow)
+	if len(apps) != 2 {
+		t.Fatalf("7-column tracker parsed %d rows, want 2", len(apps))
+	}
+	if apps[0].Status != "Applied" || apps[1].Company != "Globex" {
+		t.Errorf("7-column tracker read as %q/%q, want Applied/Globex", apps[0].Status, apps[1].Company)
+	}
+
+	// The second row lost its Score cell: read anyway, its status would be ❌.
+	wide, _ := writeTracker(t, `# Applications Tracker
+
+| # | Date | Company | Role | Score | Status | PDF | Report | Notes | URL |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-08-28 | Acme | Platform Engineer | 4.0/5 | Applied | ❌ | — | ok | https://jobs.example.com/1 |
+| 2 | 2026-08-29 | Globex | Data Engineer | Evaluated | ❌ | — | missing score | https://jobs.example.com/2 |
+`)
+	apps = mustParseApplications(t, wide)
+	if len(apps) != 1 || apps[0].Company != "Acme" {
+		t.Fatalf("a row missing an interior cell must be skipped, got %d rows: %+v", len(apps), apps)
+	}
+
+	// The second row's Notes cell is empty and flush against the closing pipe.
+	// That row is complete, and Node reads it: a guard counting a cell short
+	// would lose it.
+	flush, _ := writeTracker(t, `# Applications Tracker
+
+| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-08-28 | Acme | Platform Engineer | 4.0/5 | Applied | ❌ | — | ok |
+| 2 | 2026-08-29 | Globex | Data Engineer | 4.2/5 | Evaluated | ❌ | — ||
+`)
+	apps = mustParseApplications(t, flush)
+	if len(apps) != 2 || apps[1].Company != "Globex" || apps[1].Status != "Evaluated" {
+		t.Fatalf("a row with an empty last cell must be kept, got %d rows: %+v", len(apps), apps)
 	}
 }
 
@@ -638,6 +736,12 @@ func TestNormalizeStatus(t *testing.T) {
 				t.Errorf("NormalizeStatus(%q) = %q; want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestStatusPrioritySpeculativeBeatsTerminal(t *testing.T) {
+	if StatusPriority("Speculative") >= StatusPriority("skip") {
+		t.Fatalf("Speculative should sort ahead of skip/rejected/discarded")
 	}
 }
 

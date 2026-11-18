@@ -8,7 +8,7 @@
  * copies — and every writer excludes every other writer through the same lock.
  */
 
-import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, readlinkSync, accessSync, constants as fsConstants, chmodSync, appendFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, readlinkSync, accessSync, constants as fsConstants, chmodSync, appendFileSync, openSync, fstatSync, readSync, closeSync, copyFileSync, truncateSync } from 'fs';
 import { join, dirname, basename, resolve, relative, isAbsolute, sep } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -290,13 +290,16 @@ export const MIN_STEM_CHARS = 3;
  *
  * @param {string} a - Company cell from one side of the comparison.
  * @param {string} b - Company cell from the other side.
+ * @param {Set<string>} [formWords] - Tokens that may differ. Defaults to legal
+ *   suffixes plus generic descriptors. A caller that must not treat "Canada"
+ *   as optional passes the legal-suffix set alone.
  * @returns {boolean} True when the two cells name the same employer under a
  *   different corporate form.
  */
-export function companiesMatchIgnoringCorporateForm(a, b) {
+export function companiesMatchIgnoringCorporateForm(a, b, formWords = CORPORATE_FORM_WORDS) {
   const ta = normalizeTextKey(a, ' ').split(' ').filter(Boolean);
   const tb = normalizeTextKey(b, ' ').split(' ').filter(Boolean);
-  return corporateFormTokensMatch(ta, tb);
+  return corporateFormTokensMatch(ta, tb, formWords);
 }
 
 /**
@@ -309,16 +312,44 @@ export function companiesMatchIgnoringCorporateForm(a, b) {
  * substantive token. An empty stem is the blind-employer `?` marker and every
  * other punctuation-only cell, which must never match a named employer.
  *
+ * A dotted initialism in the tail ("L.L.C.", "S.A.", "G.m.b.H.") tokenizes to
+ * one letter per token, since normalizeTextKey() turns each dot into a
+ * separator. collapseInitialisms() joins each run of single-letter tokens back
+ * into one word, and the tail check applies to that word, so "Acme L.L.C."
+ * matches "Acme" the way "Acme LLC" does. A run that does not spell a form
+ * word ("Acme X Y" → "xy") still fails. Only the tail is collapsed: the stem
+ * must still be a token-for-token prefix of the longer name.
+ *
  * @param {string[]} ta - Tokens of one company cell.
  * @param {string[]} tb - Tokens of the other company cell.
+ * @param {Set<string>} [formWords] - Same override as companiesMatchIgnoringCorporateForm.
  * @returns {boolean}
  */
-export function corporateFormTokensMatch(ta, tb) {
+export function corporateFormTokensMatch(ta, tb, formWords = CORPORATE_FORM_WORDS) {
   const [stem, full] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
   if (stem.length === 0 || stem.length === full.length) return false;
   if (stem.join('').length < MIN_STEM_CHARS) return false;
   if (stem.some((token, i) => token !== full[i])) return false;
-  return full.slice(stem.length).every(token => CORPORATE_FORM_WORDS.has(token));
+  return collapseInitialisms(full.slice(stem.length)).every(token => formWords.has(token));
+}
+
+// Joins each run of single-character tokens into one token: ['l', 'l', 'c'] →
+// ['llc'], ['g', 'm', 'b', 'h', 'holdings'] → ['gmbh', 'holdings']. Longer
+// tokens pass through unchanged.
+function collapseInitialisms(tokens) {
+  const out = [];
+  let run = '';
+  for (const token of tokens) {
+    if ([...token].length === 1) {
+      run += token;
+      continue;
+    }
+    if (run) out.push(run);
+    run = '';
+    out.push(token);
+  }
+  if (run) out.push(run);
+  return out;
 }
 
 /**
@@ -801,6 +832,29 @@ export function writeFileAtomic(path, content, { mode } = {}) {
 }
 
 /**
+ * Copy `filePath` onto `filePath.bak` without exposing a partial backup.
+ *
+ * A direct copy onto `.bak` truncates that file first. A failure mid-copy
+ * removes the previous recovery file, and a reader can observe a short one.
+ * The copy lands in a sibling temp file. The rename replaces `.bak` only
+ * after that copy finishes, so a failure leaves the previous backup alone.
+ *
+ * @param {string} filePath - The file to copy.
+ * @returns {void}
+ */
+export function backupFileAtomically(filePath) {
+  const bak = `${filePath}.bak`;
+  const tmpPath = join(dirname(bak), `.${basename(bak)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`);
+  try {
+    copyFileSync(filePath, tmpPath);
+    renameSyncWithRetry(tmpPath, bak);
+  } catch (err) {
+    rmSync(tmpPath, { force: true });
+    throw err;
+  }
+}
+
+/**
  * Replace a hand-edited user file (cv.md, article-digest.md, portals.yml)
  * atomically, keeping what an in-place write kept.
  *
@@ -834,7 +888,7 @@ export function replaceUserFile(path, content) {
  * @param {string} path
  * @returns {string}
  */
-function userFileWriteTarget(path) {
+export function userFileWriteTarget(path) {
   let current = canonicalizeTrackerPath(path);
   for (let hops = 0; hops < 40; hops++) {
     let stat;
@@ -865,15 +919,23 @@ function userFileWriteTarget(path) {
  */
 export function appendLedgerRows(path, text) {
   let lead = '';
+  let before = 0;
+  let existed = false;
   let fd;
   try {
     fd = openSync(path, 'r');
-  } catch {
-    fd = null; // no file yet: the append below creates it
+    existed = true;
+  } catch (err) {
+    // Only a missing file starts at size 0. Any other read failure, such as a
+    // ledger that is writable but not readable, must stop here. Treating it as
+    // missing would truncate the real file to empty when the append then fails.
+    if (err?.code !== 'ENOENT') throw err;
+    fd = null;
   }
   if (fd !== null) {
     try {
       const { size } = fstatSync(fd);
+      before = size;
       if (size > 0) {
         const last = Buffer.alloc(1);
         readSync(fd, last, 0, 1, size - 1);
@@ -883,7 +945,27 @@ export function appendLedgerRows(path, text) {
       closeSync(fd);
     }
   }
-  appendFileSync(path, lead + text, 'utf-8');
+  // appendFileSync can throw after the new bytes are already in the file, for
+  // example when the close fails. The caller reports the failure and may retry,
+  // which would record the same row again. Put the file back to the size it
+  // had before this append. A truncate that itself fails is reported: hiding it
+  // would leave the caller believing the ledger was unchanged.
+  try {
+    appendFileSync(path, lead + text, 'utf-8');
+  } catch (err) {
+    try {
+      truncateSync(path, before);
+    } catch (undoErr) {
+      if (undoErr?.code === 'ENOENT' && !existed) throw err;
+      const failure = new Error(
+        `${path}: the append failed (${err.code || err.message}) and the ledger could not be put back (${undoErr.code || undoErr.message})`,
+        { cause: err },
+      );
+      failure.code = undoErr.code;
+      throw failure;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -972,10 +1054,23 @@ export function resolveCanonicalState(input, states) {
   return null;
 }
 
+// A date in a Status cell and whatever joins it to the state: `Applied 2026-01-02`,
+// `Applied - 2026-01-02`, `Applied: 2026-01-02`, `Applied (2026-01-02)`,
+// `Applied on 2026-01-02`. Group 1 is the text after it.
+const STATUS_DATE_RE = /\s*(?:[-–—,:/(]\s*)?(?:\bon\s+)?\d{4}-\d{2}-\d{2}\)?(.*)$/i;
+// The same date written ahead of the state: `2026-01-02 Applied`.
+const LEADING_STATUS_DATE_RE = /^\d{4}-\d{2}-\d{2}\b[\s,:–—-]*/;
+
+/** A Status cell without its bold or a leading date. */
+function withoutBoldOrLeadingDate(input) {
+  return String(input ?? '').replace(/\*\*/g, '').trim().replace(LEADING_STATUS_DATE_RE, '');
+}
+
 /**
  * A raw Status cell without the decoration legacy trackers carry: markdown
- * bold and a trailing date (`**Applied**`, `Applied 2026-01-02`). What is left
- * is the spelling states.yml resolves, a label or an alias, unchanged.
+ * bold and a date (`**Applied**`, `Applied 2026-01-02`, `Applied (2026-01-02)`).
+ * What is left is the spelling states.yml resolves, a label or an alias,
+ * unchanged.
  *
  * The read side resolves a cell through this (resolveCanonicalStateId()), so a
  * writer that copies a cell must strip it the same way. Otherwise it writes a
@@ -986,7 +1081,48 @@ export function resolveCanonicalState(input, states) {
  * @returns {string}
  */
 export function stripStatusDecoration(input) {
-  return String(input ?? '').replace(/\*\*/g, '').replace(/\s+\d{4}-\d{2}-\d{2}.*$/, '').trim();
+  return withoutBoldOrLeadingDate(input).replace(STATUS_DATE_RE, '').trim();
+}
+
+/**
+ * What a Status cell says after its date (`Applied 2026-01-02 via referral`).
+ * It is no part of any state, so a writer that strips the date has to put it
+ * somewhere else. Empty when the cell has no date, or nothing after one.
+ *
+ * @param {*} input - Raw status cell from applications.md.
+ * @returns {string}
+ */
+export function statusTextAfterDate(input) {
+  return withoutBoldOrLeadingDate(input).match(STATUS_DATE_RE)?.[1].trim() ?? '';
+}
+
+/**
+ * A Notes cell with `entry` put first, as its own entry. set-status.mjs reads
+ * Notes as "; "-separated entries (--note, --replace-note), so text a writer
+ * moves out of another cell is joined the same way, or the note beside it can
+ * no longer be found. A "—" or "-" placeholder is no note, and gives way.
+ *
+ * @param {*} notes - The Notes cell as it stands.
+ * @param {string} entry - Text to put first.
+ * @returns {string}
+ */
+export function prependNote(notes, entry) {
+  const kept = String(notes ?? '').trim();
+  return kept && kept !== '—' && kept !== '-' ? `${entry}; ${kept}` : entry;
+}
+
+/**
+ * Whether `entry` is already a whole "; "-separated entry of a Notes cell, or
+ * the whole cell. Text inside a longer entry ("sent" in "sent CV") is not:
+ * --replace-note can replace that entry, and the text would go with it.
+ *
+ * @param {*} notes - The Notes cell as it stands.
+ * @param {string} entry - Text to look for.
+ * @returns {boolean}
+ */
+export function hasNoteEntry(notes, entry) {
+  const kept = String(notes ?? '').trim();
+  return kept === entry || kept.startsWith(`${entry}; `) || kept.endsWith(`; ${entry}`) || kept.includes(`; ${entry}; `);
 }
 
 /**

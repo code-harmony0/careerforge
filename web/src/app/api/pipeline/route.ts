@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { careerOpsRoot, pipelineSummary } from "@/lib/career-ops";
+import { careerOpsRoot, pipelineSummary, withCloseDates } from "@/lib/career-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // always read fresh local files
@@ -34,7 +34,7 @@ export async function GET() {
   const root = s.root || careerOpsRoot();
   const reportUrls = getReportUrls(root);
 
-  const applications = s.applications.map((app) => {
+  const mappedApplications = s.applications.map((app) => {
     if (app.url) return app;
     const n = parseInt(app.n, 10);
     const repMatch = app.report?.match(/\b(\d+)\b/);
@@ -43,6 +43,7 @@ export async function GET() {
     return url ? { ...app, url } : app;
   });
 
+  const applications = await withCloseDates(mappedApplications);
   return Response.json({
     inbox: s.inbox,
     applications,

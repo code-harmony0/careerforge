@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/santifer/career-ops/dashboard/internal/data"
 	"github.com/santifer/career-ops/dashboard/internal/model"
@@ -53,7 +54,7 @@ func TestWithReloadedDataPreservesStateAndSelection(t *testing.T) {
 		40,
 	)
 	pm.sortMode = sortCompany
-	pm.activeTab = 0
+	pm.activeTab = tabIndexForFilter(t, filterAll)
 	pm.viewMode = "flat"
 	pm.applyFilterAndSort()
 	pm.cursor = 1
@@ -594,6 +595,60 @@ func previewModelWith(t *testing.T, app model.CareerApplication) PipelineModel {
 	return pm
 }
 
+// TestPreviewTruncatesTldrToTerminalCells verifies visible truncation across terminal widths and wide runes.
+// @param t The Go test context.
+// @returns No value.
+func TestPreviewTruncatesTldrToTerminalCells(t *testing.T) {
+	tests := []struct {
+		name       string
+		width      int
+		tldr       string
+		wantSuffix string
+	}{
+		{name: "latin at 80 columns", width: 80, tldr: strings.Repeat("a", 120), wantSuffix: "..."},
+		{name: "latin at 120 columns", width: 120, tldr: strings.Repeat("a", 120), wantSuffix: "..."},
+		{name: "latin at 160 columns", width: 160, tldr: strings.Repeat("a", 120), wantSuffix: strings.Repeat("a", 120)},
+		{name: "wide runes at 80 columns", width: 80, tldr: strings.Repeat("界", 117) + "...", wantSuffix: "..."},
+		{name: "wide runes at 120 columns", width: 120, tldr: strings.Repeat("界", 117) + "...", wantSuffix: "..."},
+		{name: "wide runes at 160 columns", width: 160, tldr: strings.Repeat("界", 117) + "...", wantSuffix: "..."},
+		// 14 columns leave exactly three cells for the value: the ellipsis still fits.
+		{name: "exactly three cells left", width: 14, tldr: strings.Repeat("a", 20), wantSuffix: "..."},
+		// ansi.Truncate counts a keycap as one cell where ansi.StringWidth counts two.
+		{name: "keycap emoji at 15 columns", width: 15, tldr: "1️⃣ 2️⃣ 3️⃣ ok", wantSuffix: "..."},
+		{name: "keycap emoji at 24 columns", width: 24, tldr: strings.Repeat("1️⃣ ", 20), wantSuffix: "..."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := model.CareerApplication{
+				Company:    "Acme",
+				Role:       "Agent Engineer",
+				ReportPath: "reports/001-acme.md",
+			}
+			pm := previewModelWith(t, app)
+			pm.width = tt.width
+			pm.reportCache[app.ReportPath] = reportSummary{tldr: tt.tldr}
+
+			var tldrLine string
+			for _, line := range strings.Split(ansi.Strip(pm.renderPreview()), "\n") {
+				if strings.Contains(line, "TL;DR: ") {
+					tldrLine = line
+					break
+				}
+			}
+			if tldrLine == "" {
+				t.Fatal("expected preview to include the cached TL;DR")
+			}
+			if got := ansi.StringWidth(tldrLine); got > tt.width {
+				t.Fatalf("TL;DR line is %d cells, wider than terminal width %d: %q", got, tt.width, tldrLine)
+			}
+			if !strings.HasSuffix(strings.TrimRight(tldrLine, " "), tt.wantSuffix) {
+				t.Fatalf("TL;DR line should end with %q, got %q", tt.wantSuffix, tldrLine)
+			}
+		})
+	}
+}
+
 func TestPreviewKeepsDiscardReasonWhenTlDrIsCached(t *testing.T) {
 	app := model.CareerApplication{
 		Company:    "Acme",
@@ -736,6 +791,24 @@ func TestWithReloadedDataPreservesCursorWhenAppRemoved(t *testing.T) {
 	}
 }
 
+func TestPipelineTabsIncludeSpeculative(t *testing.T) {
+	found := false
+	for _, tab := range getPipelineTabs() {
+		if tab.filter == filterSpeculative {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected pipeline tabs to include the speculative filter")
+	}
+}
+
+func TestStatusLabelSpeculative(t *testing.T) {
+	if got := statusLabel("speculative"); got != "Speculative" {
+		t.Fatalf("statusLabel(speculative) = %q, want Speculative", got)
+	}
+}
+
 // Regression: the viewer status path starts the discard reason picker (or the
 // hired celebration) on the pipeline model and then immediately reloads data.
 // WithReloadedData must carry that in-progress flow state over — wiping it
@@ -824,6 +897,20 @@ func TestGetStatusPairsUnrecognizedStatusFallsBackToStaticOrder(t *testing.T) {
 	for i := range base {
 		if got[i].Canonical != base[i].Canonical {
 			t.Fatalf("got[%d].Canonical = %q, want %q (static order)", i, got[i].Canonical, base[i].Canonical)
+		}
+	}
+}
+
+func TestSpeculativeHasItsOwnStatusColour(t *testing.T) {
+	m := NewPipelineModel(theme.NewTheme(""), nil, model.PipelineMetrics{}, t.TempDir(), 120, 30)
+	colours := m.statusColorMap()
+	spec, ok := colours["speculative"]
+	if !ok {
+		t.Fatal("speculative has no status colour")
+	}
+	for status, c := range colours {
+		if status != "speculative" && c == spec {
+			t.Fatalf("speculative shares its colour with %q", status)
 		}
 	}
 }

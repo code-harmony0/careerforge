@@ -16,9 +16,12 @@ import fs from "node:fs";
 import { slugify } from "./pdf-paths.mjs";
 import { setInboxSkip } from "./inbox-skip.mjs";
 import { parseEvaluationOptions } from "./evaluation-options.mjs";
+import { machineSummarySection } from "./machine-summary-section.mjs";
+import { classifyEvaluationGate, evaluationGateConflictsWithReport } from "./evaluation-gate.mjs";
+import { APPLY_LINE } from "./report-sections.mjs";
 
 const ISO_DATE_RE = /^20\d{2}-\d{2}-\d{2}$/;
-const YAML_FENCE = /##\s*Machine Summary\s*\n+```(?:yaml|yml)?\s*\n([\s\S]*?)\n```/i;
+const YAML_FENCE = /^##\s*Machine Summary\s*\n+```(?:yaml|yml)?\s*\n([\s\S]*?)\n```/i;
 const TITLE_RE = /^#\s+Evaluation:\s+(.+?)\s+(?:—|--|–|-)\s+(.+)$/m;
 
 /**
@@ -27,15 +30,26 @@ const TITLE_RE = /^#\s+Evaluation:\s+(.+?)\s+(?:—|--|–|-)\s+(.+)$/m;
  * Pure, and here rather than in the route, because it is the decision point
  * for the backend evaluate pipeline: nothing is written unless this says yes.
  *
- * @param {{envelope: object|undefined, noOutputMessage: string|null, sawError: boolean, cleanExit: boolean, agentText?: string}} signals
- * @returns {{ok: true} | {ok: false, message: string}}
+ * @param {{envelope: object|undefined, noOutputMessage: string|null, sawError: boolean, cleanExit: boolean, text?: string, agentText?: string}} signals
+ * @returns {{ok: true} | {ok: false, message: string, gated?: true, reason?: string, confirmationRequired?: true}}
  */
-export function evaluateRunOutcome({ envelope, noOutputMessage, sawError, cleanExit, agentText }) {
+export function evaluateRunOutcome({ envelope, noOutputMessage, sawError, cleanExit, text, agentText }) {
   if (noOutputMessage) return { ok: false, message: noOutputMessage };
+  if (cleanExit && !sawError && envelope?.ok === true && evaluationGateConflictsWithReport(text)) {
+    return { ok: false, message: "The evaluation returned both a report and a confirmation stop, so nothing was saved. Review the output before running it again." };
+  }
+  // Real process/stream failures remain authoritative even if partial output
+  // happened to contain a gate declaration before the failure.
+  if (cleanExit && !sawError && envelope?.ok === false
+      && envelope.error === "The agent emitted no <<report-md>> envelope, so there is no report to save.") {
+    const stopped = classifyEvaluationGate(text);
+    if (stopped) return { ok: false, gated: true, ...stopped };
+  }
   if (envelope?.ok !== true || !cleanExit || sawError) {
-    if (agentText) {
-      const loginWallMatch = agentText.match(/(?:login wall|sign-in|inaccessible|behind login|paste the full job description|paste the JD text)[^\n]*/i);
-      const jdUnavailable = agentText.includes("needs_confirmation: jd_unavailable") || Boolean(loginWallMatch);
+    const raw = agentText || text;
+    if (raw) {
+      const loginWallMatch = raw.match(/(?:login wall|sign-in|inaccessible|behind login|paste the full job description|paste the JD text)[^\n]*/i);
+      const jdUnavailable = raw.includes("needs_confirmation: jd_unavailable") || Boolean(loginWallMatch);
       if (jdUnavailable) {
         return {
           ok: false,
@@ -50,6 +64,17 @@ export function evaluateRunOutcome({ envelope, noOutputMessage, sawError, cleanE
     };
   }
   return { ok: true };
+}
+
+/** Map an unpersisted terminal outcome to the route's event contract.
+ * Report success stays with the persistence coordinator, never this helper.
+ * @param {ReturnType<typeof evaluateRunOutcome>} outcome
+ * @param {{tokens?: number, costUsd?: number|null}} usage
+ */
+export function evaluationOutcomeEvent(outcome, { tokens, costUsd } = {}) {
+  if (outcome.ok) return null;
+  if (outcome.gated) return { type: "gated", reason: outcome.reason, message: outcome.message, confirmationRequired: outcome.confirmationRequired, tokens, costUsd };
+  return { type: "error", msg: outcome.message };
 }
 
 /**
@@ -84,7 +109,15 @@ export function formatScore(raw) {
   if (!m) return null;
   const n = Number(m[1]);
   if (!Number.isFinite(n) || n < 0 || n > 5) return null;
-  return `${n.toFixed(1)}/5`;
+  return `${oneDecimalScore(n)}/5`;
+}
+
+function oneDecimalScore(n) {
+  const rounded = n.toFixed(1);
+  if (n < APPLY_LINE && Number(rounded) >= APPLY_LINE) {
+    return (Math.floor(n * 10) / 10).toFixed(1);
+  }
+  return rounded;
 }
 
 /**
@@ -102,7 +135,7 @@ function tsvUnsafe(value) {
 }
 
 export function parseReportMeta(markdown) {
-  const fence = String(markdown ?? "").match(YAML_FENCE)?.[1] ?? "";
+  const fence = machineSummarySection(markdown).match(YAML_FENCE)?.[1] ?? "";
   const title = String(markdown ?? "").match(TITLE_RE);
   const company = yamlScalar(fence, "company") || title?.[1]?.trim() || null;
   const role = yamlScalar(fence, "role") || title?.[2]?.trim() || null;

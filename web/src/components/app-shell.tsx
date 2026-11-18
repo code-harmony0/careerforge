@@ -8,6 +8,7 @@ import { AssistantConsole } from "@/components/assistant-console";
 import { MobileNav } from "@/components/mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackToTop } from "@/components/back-to-top";
+import { CommandPalette } from "@/components/command-palette";
 import { JobsProvider } from "@/components/jobs/job-store";
 import { PipelineProvider } from "@/components/pipeline/pipeline-provider";
 import { ApplyProvider } from "@/components/apply/apply-provider";
@@ -34,13 +35,14 @@ export function AppShell({ children, followupsEnabled }: { children: React.React
       </a>
       <MobileNav followupsEnabled={followupsEnabled} />
       <div className="flex min-h-screen">
-        <aside className="ambient-glow sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface/30 p-4 md:flex">
+        <aside className="ambient-glow sticky top-0 hidden print:hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface/30 p-4 md:flex">
           <Link href="/" className="mb-8 flex items-center gap-2.5 px-1">
             <CoMark size={32} />
             <span className={`${instrumentSerif.className} relative -top-px text-2xl font-normal tracking-tight text-landing`}>
               career-ops
             </span>
           </Link>
+          <CommandPalette followupsEnabled={followupsEnabled} />
           <nav className="flex flex-col gap-1">
             {visibleNavItems(followupsEnabled).map(({ href, label, icon: Icon, chip }) => {
               const active = isActivePath(href, pathname);
@@ -69,18 +71,9 @@ export function AppShell({ children, followupsEnabled }: { children: React.React
 
           <WorkerPills />
 
-          <div className="mt-auto space-y-3 pb-16 pt-4">
+          <div className="mt-auto space-y-3 pb-16 pt-4 md-tall:pb-40">
             <UsageMeter />
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-faint">Appearance</span>
-                <span className="font-mono text-[10px] text-faint">THEME</span>
-              </div>
-              <ThemeToggle showLabel />
-              <div className="px-1">
-                <span className={`${instrumentSerif.className} text-sm text-faint`}>local-first · v0</span>
-              </div>
-            </div>
+            <ThemeToggle showLabel />
           </div>
         </aside>
         {/* overflow-x-CLIP, not hidden. `hidden` makes this a scroll container
@@ -98,10 +91,12 @@ export function AppShell({ children, followupsEnabled }: { children: React.React
             scrolls inside its own overflow-x-auto container, which is what that
             container was always for. */}
         <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-x-clip focus:outline-none">{children}</main>
-        <AssistantConsole />
-        <BackToTop />
-        <FirstScoreView />
-        <BetaBanner />
+        <div className="print:hidden">
+          <AssistantConsole />
+          <BackToTop />
+          <FirstScoreView />
+          <BetaBanner />
+        </div>
       </div>
       </ExploreProvider>
       </ApplyProvider>
